@@ -540,16 +540,15 @@ canvas{width:100%}
 .securitoHero{ position:relative; }
 .secMouth{
   position:absolute;
-  /* Approx position over robot face in the hero image */
-  left: 165px;
-  top: 250px;
-  width: 34px;
-  height: 14px;
-  border-radius: 0 0 16px 16px;
-  background: rgba(20,20,20,.75);
-  filter: blur(.2px);
+  left: 50%;
+  top: 34%;              /* Subimos más la boca */
+  width: 10%;
+  height: 4%;
+  border-radius: 0 0 18px 18px;
+  background: rgba(10,10,10,.9);
   opacity: 0;
   transform-origin: 50% 20%;
+  transform: translateX(-50%) scaleY(.6);
 }
 .securitoHero.talking .secMouth{
   opacity: 1;
@@ -693,3 +692,83 @@ canvas{width:100%}
   .securitoTop{ flex-direction:column; }
   .securitoHero, .heroBubblePanel{ flex: 1 1 auto; }
 }
+
+/* V27: Simplified Securito layout (avatar + chat only) */
+.securitoSplit{
+  display:grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  margin-top: 14px;
+}
+@media (max-width: 980px){
+  .securitoSplit{ grid-template-columns: 1fr; }
+}
+
+.securitoAvatarCard{
+  border-radius: 22px;
+  padding: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.18);
+}
+
+.securitoChatCard{
+  border-radius: 22px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.16);
+  display:flex;
+  flex-direction:column;
+  min-height: 520px;
+}
+
+.securitoAvatarWrap{
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1.05;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background: radial-gradient(circle at 35% 25%, rgba(255,214,72,.18), rgba(0,0,0,0) 55%);
+  border-radius: 18px;
+  overflow:hidden;
+}
+.securitoRobot{
+  width: 92%;
+  height: auto;
+  display:block;
+  filter: drop-shadow(0 18px 30px rgba(0,0,0,.35));
+}
+
+/* Mouth overlay positioned on robot face (percentage based) */
+.secMouth{
+  position:absolute;
+  left: 47%;
+  top: 42%;
+  width: 12%;
+  height: 5%;
+  border-radius: 0 0 16px 16px;
+  background: rgba(20,20,20,.78);
+  opacity: 0;
+  transform-origin: 50% 20%;
+  transform: translateX(-50%) scaleY(.6);
+}
+.securitoAvatarWrap.talking .secMouth{
+  opacity: 1;
+  animation: mouthTalk 140ms infinite;
+}
+@keyframes mouthTalk{
+  0%{ transform: translateX(-50%) scaleY(0.55); }
+  50%{ transform: translateX(-50%) scaleY(1.25); }
+  100%{ transform: translateX(-50%) scaleY(0.55); }
+}
+
+.avatarControls{
+  margin-top: 12px;
+  display:flex;
+  gap: 10px;
+  align-items:center;
+  flex-wrap:wrap;
+}
+
+/* Ensure chat log grows */
+#secLog{ flex: 1 1 auto; min-height: 260px; overflow:auto; }

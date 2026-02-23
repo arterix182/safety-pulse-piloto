@@ -1164,9 +1164,10 @@ window.addEventListener("DOMContentLoaded", ()=>{
 
 
 function toggleSecuritoTalking(on){
-  const hero = document.querySelector(".securitoHero");
-  if (hero) hero.classList.toggle("talking", !!on);
+  const wrap = document.querySelector(".securitoAvatarWrap");
+  if (wrap) wrap.classList.toggle("talking", !!on);
 }
+
 
 function escapeHtml(str){
   return String(str).replace(/[&<>"']/g, s=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[s]));
