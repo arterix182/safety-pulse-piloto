@@ -7,7 +7,8 @@ const VIEWS = {
   home: $("#viewHome"),
   form: $("#viewForm"),
   dashboard: $("#viewDashboard"),
-  manual: $("#viewManual")
+  manual: $("#viewManual"),
+  securito: $("#viewSecurito")
 };
 
 const state = {
@@ -78,7 +79,7 @@ function nowISO(){
 function deriveTurnoLinea(manager, fallbackShift, fallbackLine){
   const m = (manager || "").toString().trim().toLowerCase();
   // Reglas piloto (puedes expandir un catálogo de managers -> línea/turno)
-  if (m.includes("arturo ampudia")){
+  if (m.includes("arturo ampudia pacheco") || m.includes("arturo ampudia")){
     return { turno: "Tripulación A", linea: "Chasis 1" };
   }
   return { turno: (fallbackShift || ""), linea: (fallbackLine || "") };
@@ -110,7 +111,7 @@ function setView(name){
   VIEWS[name].classList.add("active");
   // bottom bar active
   $$(".navbtn").forEach(b => b.classList.remove("active"));
-  const map = {home:"home", dashboard:"dashboard", manual:"manual"};
+  const map = {home:"home", dashboard:"dashboard", manual:"manual", securito:"securito"};
   if (map[name]) $(`.navbtn[data-nav="${map[name]}"]`)?.classList.add("active");
   // show/hide actions
   const logged = !!state.user;
@@ -255,6 +256,7 @@ function nav(target){
   if (target === "manual") return setView("manual");
   if (target === "recorrido") return openForm("recorrido");
   if (target === "interaccion") return openForm("interaccion");
+  if (target === "securito") return openSecurito();
 }
 
 // --------------------- Form
@@ -893,5 +895,29 @@ document.addEventListener("keydown", (e)=>{
   if (document.activeElement === inp){
     const btn = document.getElementById("secSend");
     if (btn) btn.click();
+  }
+});
+
+
+function speak(text, anime=true){
+  try{
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = "es-MX";
+    u.rate = anime ? 1.08 : 1.0;
+    u.pitch = anime ? 1.2 : 1.0;
+    // Try to pick a Spanish voice if available
+    const voices = speechSynthesis.getVoices();
+    const v = voices.find(v=>/es/i.test(v.lang)) || voices[0];
+    if (v) u.voice = v;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+document.addEventListener("click", (e)=>{
+  const t = e.target;
+  if (t && t.id === "hdrSecurito"){
+    openSecurito();
   }
 });

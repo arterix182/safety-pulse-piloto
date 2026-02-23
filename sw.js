@@ -1,10 +1,11 @@
-const CACHE = "safety-pwa-v12";
+const CACHE = "safety-pwa-v15";
 const CORE = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
   "./manifest.webmanifest",
+  "./assets/securito.webp",
   "./assets/logo.png",
   "./assets/logo.webp",
   "./data/directory.json",
