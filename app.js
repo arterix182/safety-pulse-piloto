@@ -903,6 +903,9 @@ function speak(text, anime=true){
   try{
     if (!("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(text);
+    u.onstart = ()=>toggleSecuritoTalking(true);
+    u.onend = ()=>toggleSecuritoTalking(false);
+    u.onerror = ()=>toggleSecuritoTalking(false);
     u.lang = "es-MX";
     u.rate = anime ? 1.08 : 1.0;
     u.pitch = anime ? 1.2 : 1.0;
@@ -911,6 +914,7 @@ function speak(text, anime=true){
     const v = voices.find(v=>/es/i.test(v.lang)) || voices[0];
     if (v) u.voice = v;
     speechSynthesis.cancel();
+    toggleSecuritoTalking(false);
     speechSynthesis.speak(u);
   }catch(e){}
 }
@@ -983,7 +987,7 @@ document.addEventListener("keydown", (e)=>{
 
 
 // V22: Securito listening UI + mic level meter + speech-to-text (browser)
-let __secRec = null;
+window.window.__secRec = window.window.__secRec || null;
 let __secAudioStream = null;
 let __secAudioCtx = null;
 let __secAnalyser = null;
@@ -995,6 +999,66 @@ function secSetListening(on){
   if (btn) btn.classList.toggle("listening", !!on);
   if (label) label.textContent = on ? "Escuchando…" : "Listo";
 }
+
+// V23: wrappers used by UI buttons (fix ReferenceError)
+window.window.__secRec = window.window.__secRec || null;
+
+function startListening(onText){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) return false;
+
+  try{
+    secSetListening(true);
+    // start mic meter (non-blocking)
+    secStartMicLevel();
+
+    if (window.__secRec) { try{ window.__secRec.stop(); }catch(e){} }
+    const r = new SR();
+    window.__secRec = r;
+    r.lang = "es-MX";
+    r.interimResults = true;
+    r.continuous = false;
+
+    let finalText = "";
+    r.onresult = (ev)=>{
+      let interim = "";
+      for (let i=ev.resultIndex; i<ev.results.length; i++){
+        const txt = ev.results[i][0].transcript;
+        if (ev.results[i].isFinal) finalText += txt;
+        else interim += txt;
+      }
+      const combined = (finalText + interim).trim();
+      if (onText) onText(combined, false);
+      // If last result is final, notify
+      const last = ev.results[ev.results.length-1];
+      if (last && last.isFinal){
+        if (onText) onText((finalText).trim(), true);
+      }
+    };
+    r.onerror = ()=>{
+      secSetListening(false);
+    };
+    r.onend = ()=>{
+      secSetListening(false);
+      // keep mic meter until stop button, so user sees level while talking
+    };
+
+    r.start();
+    return true;
+  }catch(e){
+    secSetListening(false);
+    return false;
+  }
+}
+
+function stopListening(){
+  try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
+  window.__secRec = null;
+  secSetListening(false);
+  secStopMicLevel();
+}
+
+
 
 async function secStartMicLevel(){
   try{
@@ -1062,9 +1126,9 @@ window.addEventListener("DOMContentLoaded", ()=>{
       secSetListening(true);
       await secStartMicLevel();
 
-      if (__secRec){ try{ __secRec.stop(); }catch(e){} }
-      __secRec = secCreateSpeechRec();
-      if (!__secRec){
+      if (window.__secRec){ try{ window.__secRec.stop(); }catch(e){} }
+      window.__secRec = secCreateSpeechRec();
+      if (!window.__secRec){
         secSetListening(false);
         // fallback message (keep it short)
         if (typeof secLog === "function") secLog("Securito", "Tu navegador no soporta dictado. Escribe y te respondo con voz.");
@@ -1072,7 +1136,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
       }
 
       let finalText = "";
-      __secRec.onresult = (ev)=>{
+      window.__secRec.onresult = (ev)=>{
         let interim = "";
         for (let i=ev.resultIndex;i<ev.results.length;i++){
           const txt = ev.results[i][0].transcript;
@@ -1081,19 +1145,151 @@ window.addEventListener("DOMContentLoaded", ()=>{
         }
         if (input) input.value = (finalText + interim).trim();
       };
-      __secRec.onerror = ()=>{ secSetListening(false); };
-      __secRec.onend = ()=>{ secSetListening(false); };
+      window.__secRec.onerror = ()=>{ secSetListening(false); };
+      window.__secRec.onend = ()=>{ secSetListening(false); };
 
-      try{ __secRec.start(); }catch(e){ secSetListening(false); }
+      try{ window.__secRec.start(); }catch(e){ secSetListening(false); }
     });
   }
 
   if (stop){
     stop.addEventListener("click", ()=>{
-      try{ if (__secRec) __secRec.stop(); }catch(e){}
-      __secRec = null;
+      try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
+      window.__secRec = null;
       secSetListening(false);
       secStopMicLevel();
     });
   }
 });
+
+
+function toggleSecuritoTalking(on){
+  const hero = document.querySelector(".securitoHero");
+  if (hero) hero.classList.toggle("talking", !!on);
+}
+
+function escapeHtml(str){
+  return String(str).replace(/[&<>"']/g, s=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[s]));
+}
+
+// ===== V25 SECURITO CONTROLLER =====
+(function(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function log(role, text){
+    const logEl = document.getElementById("secLog");
+    if (!logEl) return;
+    const row = document.createElement("div");
+    row.className = "chatMsg";
+    row.innerHTML = `<b>${role}:</b> ${text}`;
+    logEl.appendChild(row);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setListening(on){
+    const btn = document.getElementById("secTalk");
+    const label = document.getElementById("secListenLabel");
+    if (btn) btn.classList.toggle("listening", !!on);
+    if (label) label.textContent = on ? "Escuchando…" : "Listo";
+  }
+
+  async function refreshContext(){
+    const box = document.getElementById("secTopContext");
+    try{
+      const all = await dbGetAll();
+      const ctx = topContextFromRecords(all);
+      if (box) box.textContent = ctx.text;
+      return ctx;
+    }catch(e){
+      if (box) box.textContent = "Sin datos aún.";
+      return { topActs:[], topConds:[], text:"Sin datos aún." };
+    }
+  }
+
+  function respond(userText, ctx){
+    const focus = (ctx.topActs?.[0]?.name) || (ctx.topConds?.[0]?.name) || "seguridad";
+    return [
+      `Enfoque: ${focus}. Objetivo: reducir recurrencia en 2 semanas.`,
+      "Campaña: 'Cero Excusas, Cero Riesgo' (micro-mensajes diarios + verificación rápida).",
+      "Acciones (semana 1):",
+      "• Walk & Talk de 3 minutos por área (1 corrección + 1 reconocimiento).",
+      "• Auditoría express 5x5 al inicio de turno.",
+      "Contramedidas:",
+      "• PPE: checklist visual + reposición inmediata en punto de uso.",
+      "• Celular/alimentos: zona definida + refuerzo de líderes.",
+      "Métrica: % cumplimiento por turno + top reincidencias (coaching)."
+    ].join("\n");
+  }
+
+  function talk(text){
+    const voiceOn = document.getElementById("secVoice")?.checked;
+    if (!voiceOn) return;
+    speak(text, { anime: document.getElementById("secAnime")?.checked });
+  }
+
+  function hook(){
+    const talkBtn = document.getElementById("secTalk");
+    const stopBtn = document.getElementById("secStop");
+    const sendBtn = document.getElementById("secSend");
+    const refreshBtn = document.getElementById("secRefresh");
+    const input = document.getElementById("secInput");
+
+    refreshBtn?.addEventListener("click", refreshContext);
+
+    sendBtn?.addEventListener("click", async ()=>{
+      const msg = input?.value?.trim();
+      if (!msg) return;
+      log("Tú", escapeHtml(msg));
+      if (input) input.value = "";
+      const ctx = await refreshContext();
+      const ans = respond(msg, ctx);
+      log("Securito", escapeHtml(ans).replace(/\n/g,"<br>"));
+      talk(ans);
+    });
+
+    talkBtn?.addEventListener("click", ()=>{
+      setListening(true);
+      secStartMicLevel();
+
+      if (!SR){
+        setListening(false);
+        return;
+      }
+      const r = new SR();
+      window.__secRec = r;
+      r.lang = "es-MX";
+      r.interimResults = true;
+      r.continuous = false;
+      let finalText = "";
+      r.onresult = (ev)=>{
+        let interim = "";
+        for (let i=ev.resultIndex; i<ev.results.length; i++){
+          const txt = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) finalText += txt;
+          else interim += txt;
+        }
+        if (input) input.value = (finalText + interim).trim();
+      };
+      r.onerror = ()=>{ setListening(false); };
+      r.onend = ()=>{ setListening(false); };
+      try{ r.start(); }catch(e){ setListening(false); }
+    });
+
+    stopBtn?.addEventListener("click", ()=>{
+      try{ window.__secRec?.stop?.(); }catch(e){}
+      window.__secRec = null;
+      setListening(false);
+      secStopMicLevel();
+    });
+  }
+
+  window.addEventListener("DOMContentLoaded", async ()=>{
+    hook();
+    await refreshContext();
+    const logEl = document.getElementById("secLog");
+    if (logEl && !logEl.dataset.init){
+      logEl.dataset.init="1";
+      log("Securito", "Estoy listo. Dime el hallazgo y tu objetivo. Te doy campaña, acciones y contramedidas.");
+    }
+  });
+})();
