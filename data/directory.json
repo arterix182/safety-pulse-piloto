@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-02-23T03:06:02.518665Z",
+  "count": 1,
+  "byGmin": {
+    "530447361": {
+      "gmin": "530447361",
+      "name": "Arturo Ampudia",
+      "legalName": "Arturo Ampudia",
+      "plant": "San Luis Potosí Transmission",
+      "org": "SLPO_TRANS_MAC_A_A GF9 Prismatic A (Sergio Gonzalez Ibarra)",
+      "costCenter": "MX4PA00670 MFG0230000 MFG0230000MX39 Prismatic MACH-9 SPDans _7090A00499",
+      "shift": "D_56_07_6:00_18:00 (Mexico)",
+      "manager": "ADOLF HITLER",
+      "managerGmin": "530447361",
+      "hireDate": "2026-01-19",
+      "lengthOfServiceYears": 0.04
+    }
+  }
+}
