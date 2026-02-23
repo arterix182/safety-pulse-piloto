@@ -1,10 +1,14 @@
 [
-  "No uso de EPP (lentes/guantes/casco)",
-  "Manos en zona de pellizco",
-  "Caminar en zona AGV",
-  "Uso incorrecto de herramienta",
-  "Postura forzada / ergonomía",
-  "Bloqueo-etiquetado no aplicado",
-  "Orden y limpieza deficiente",
-  "Distracción (celular) en área"
+  "casco de seguridad",
+  "guantes",
+  "gafas de seguridad",
+  "cabello suelto",
+  "joyeria",
+  "alimentos",
+  "uso de celular",
+  "3-2-1-0 omitido",
+  "platica de seguridad",
+  "MST sin registro",
+  "MST no lo conoce",
+  "Paro emergencia"
 ]

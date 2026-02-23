@@ -1,15 +1,15 @@
 {
-  "name": "Safety Pulse",
-  "short_name": "Safety",
+  "name": "SAFETY APP",
+  "short_name": "SAFETY APP",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#0b1220",
-  "theme_color": "#0b1220",
+  "background_color": "#facc15",
+  "theme_color": "#facc15",
   "icons": [
     {
-      "src": "assets/logo.svg",
+      "src": "assets/logo.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any maskable"
     }
   ]

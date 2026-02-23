@@ -12,15 +12,24 @@
   --r: 22px;
 }
 *{box-sizing:border-box}
-html,body{height:100%}
+html,body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+  background: radial-gradient(1200px 800px at 20% 0%, rgba(0,0,0,.08), transparent 55%),
+              radial-gradient(900px 600px at 80% 10%, rgba(0,0,0,.10), transparent 55%),
+              linear-gradient(180deg, #ffd84a, #facc15);
+  color:var(--text);
+}
+
 body{
   margin:0;
   font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
-  background: radial-gradient(1200px 800px at 20% 0%, rgba(250,204,21,.12), transparent 55%),
-              radial-gradient(900px 600px at 80% 10%, rgba(34,197,94,.12), transparent 55%),
-              linear-gradient(180deg, #07101f, var(--bg));
+  background: radial-gradient(1200px 800px at 20% 0%, rgba(0,0,0,.08), transparent 55%),
+              radial-gradient(900px 600px at 80% 10%, rgba(0,0,0,.10), transparent 55%),
+              linear-gradient(180deg, #ffd84a, #facc15);
   color:var(--text);
 }
+
 .app{min-height:100%; display:flex; flex-direction:column}
 .topbar{
   position:sticky; top:0; z-index:10;
@@ -53,7 +62,9 @@ p{color:var(--muted); margin:0 0 18px}
   box-shadow: var(--shadow);
   padding: 16px;
 }
-.card.wide{max-width:860px}
+.card.wide{max-width:860px
+  overflow: visible;
+}
 .field{display:flex; flex-direction:column; gap:6px; margin:12px 0}
 .field > span{font-size:12px; color:var(--muted)}
 input, textarea{
@@ -248,4 +259,190 @@ button.ghost{background: rgba(255,255,255,.04)}
   .grid{grid-template-columns: 1fr}
   .hero{flex-direction:column}
   .fab{bottom: 92px}
+}
+
+/* Segmented control */
+.seg{
+  display:flex; gap:8px; margin: 8px 0 6px;
+  padding: 6px;
+  border-radius: 18px;
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(255,255,255,.18);
+  backdrop-filter: blur(8px);
+}
+.segBtn{
+  flex:1;
+  border-radius: 14px;
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(255,255,255,.10);
+  color: rgba(9,16,31,.92);
+  font-weight:900;
+}
+.segBtn.active{
+  background: rgba(9,16,31,.92);
+  color: #facc15;
+  border-color: rgba(9,16,31,.85);
+}
+.hintSmall{font-size:12px; color: rgba(9,16,31,.70); margin: 0 0 10px}
+
+/* Selects */
+select{
+  width:100%;
+  border-radius: 16px;
+  border: 1px solid rgba(0,0,0,.12);
+  background: rgba(255,255,255,.26);
+  color: rgba(9,16,31,.92);
+  padding: 12px 12px;
+  outline:none;
+}
+select:focus{border-color: rgba(9,16,31,.50); box-shadow: 0 0 0 4px rgba(9,16,31,.10)}
+
+/* Dashboard charts */
+.filters .field > span{color: rgba(9,16,31,.72)}
+.charts{
+  margin-top: 12px;
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.chartCard{
+  overflow: visible;
+
+  border-radius: var(--r);
+  border: 1px solid rgba(0,0,0,.10);
+  background: rgba(255,255,255,.18);
+  padding: 12px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.18);
+}
+.chartTitle{
+  font-weight: 900;
+  color: rgba(9,16,31,.92);
+  margin-bottom: 8px;
+}
+canvas{width:100%}
+
+@media (max-width:720px){
+  .charts{grid-template-columns: 1fr}
+}
+
+
+/* --- Dashboard layout fixes --- */
+.view{padding: 22px;}
+.card.wide{
+  max-width: 1120px;
+  width: min(1120px, calc(100% - 24px));
+  margin: 0 auto;
+}
+#viewDashboard .filters{margin-top: 10px}
+#viewDashboard .row3{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 860px){
+  #viewDashboard .row3{grid-template-columns: 1fr}
+}
+#viewDashboard .charts{
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 860px){
+  #viewDashboard .charts{grid-template-columns: 1fr}
+}
+#viewDashboard .chartCard{min-height: 260px}
+
+
+/* --- V8 tweaks --- */
+#hintDir{display:none !important;}
+
+.row3{
+  display:grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width:860px){
+  .row3{grid-template-columns: 1fr;}
+}
+
+
+/* --- V10 charts spacing + list below --- */
+#viewDashboard .charts{
+  margin-top: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+#viewDashboard .chartCard{
+  padding: 14px;
+  min-height: 340px;
+}
+#viewDashboard #recentList{
+  margin-top: 18px;
+}
+@media (max-width: 860px){
+  #viewDashboard .charts{grid-template-columns: 1fr;}
+  #viewDashboard .chartCard{min-height: 320px;}
+}
+
+#viewDashboard .chartCard{min-height: 420px;}
+
+
+/* --- Securito --- */
+.securitoGrid{
+  margin-top: 14px;
+  display:grid;
+  grid-template-columns: 320px 1fr;
+  gap: 14px;
+}
+@media (max-width: 860px){
+  .securitoGrid{grid-template-columns: 1fr;}
+}
+.securitoPanel{
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 18px;
+  padding: 14px;
+}
+.securitoTitle{font-weight:700; margin-bottom:8px;}
+.securitoKpi{font-size: 13px; opacity:.92; line-height:1.35; margin-bottom: 10px;}
+.securitoChat{
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.06);
+  border-radius: 18px;
+  padding: 14px;
+  display:flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+.chatLog{
+  flex:1;
+  overflow:auto;
+  padding: 6px 2px 10px 2px;
+}
+.msg{
+  margin: 10px 0;
+  display:flex;
+  gap:10px;
+}
+.msg .who{
+  font-weight: 800;
+  min-width: 74px;
+  opacity:.95;
+}
+.msg .txt{
+  white-space: pre-wrap;
+  line-height: 1.35;
+  opacity:.95;
+}
+.chatRow{
+  display:flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+#secInput{
+  flex:1;
+  height: 42px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.20);
+  color: #fff;
+  padding: 0 12px;
 }

@@ -15,7 +15,8 @@ const state = {
   actos: [],
   condiciones: [],
   user: null,
-  formType: "recorrido" // or "interaccion"
+  formType: "recorrido", // or "interaccion"
+  hazardMode: "acto" // 'acto' or 'cond'
 };
 
 // --------------------- IndexedDB (tiny wrapper)
@@ -73,6 +74,17 @@ async function dbClear(){
 function nowISO(){
   return new Date().toISOString();
 }
+
+function deriveTurnoLinea(manager, fallbackShift, fallbackLine){
+  const m = (manager || "").toString().trim().toLowerCase();
+  // Reglas piloto (puedes expandir un catálogo de managers -> línea/turno)
+  if (m.includes("arturo ampudia")){
+    return { turno: "Tripulación A", linea: "Chasis 1" };
+  }
+  return { turno: (fallbackShift || ""), linea: (fallbackLine || "") };
+}
+
+
 function fmtDT(iso){
   try{
     const d = new Date(iso);
@@ -127,10 +139,8 @@ async function boot(){
   try{
     const dir = await loadJSON("./data/directory.json");
     state.directory = dir;
-    $("#hintDir").textContent = `Directorio listo: ${dir.count} registros`;
-  }catch(e){
-    $("#hintDir").textContent = "Directorio: ERROR al cargar (revisa data/directory.json)";
-  }
+      }catch(e){
+      }
 
   try{ state.actos = await loadJSON("./data/actos.json"); }catch{ state.actos=[]; }
   try{ state.condiciones = await loadJSON("./data/condiciones.json"); }catch{ state.condiciones=[]; }
@@ -171,8 +181,15 @@ $("#loginBtn").addEventListener("click", async () => {
     plant: person.plant,
     org: person.org,
     manager: person.manager,
-    shift: person.shift
+    shift: person.shift,
+    line: ""
   };
+
+  // Reglas piloto (personalizadas)
+  if ((state.user.manager || "").trim().toLowerCase() === "arturo ampudia"){
+    state.user.shift = "Tripulación A";
+    state.user.line = "Chasis 1";
+  }
   localStorage.setItem("sp_user", JSON.stringify(state.user));
   toast(msg, "Listo. Bienvenido.", true);
   renderUserHeader();
@@ -245,11 +262,16 @@ const formEls = {
   title: $("#formTitle"),
   pill: $("#formTypePill"),
   auditedGmin: $("#auditedGmin"),
-  autoDate: $("#autoDate"),
+  autoLine: $("#autoLine"),
+  autoShift: $("#autoShift"),
   auditedName: $("#auditedName"),
   auditedPlant: $("#auditedPlant"),
   auditedLos: $("#auditedLos"),
   auditedMgr: $("#auditedMgr"),
+  actoWrap: $("#actoWrap"),
+  condWrap: $("#condWrap"),
+  pickActo: $("#pickActo"),
+  pickCond: $("#pickCond"),
   actoInput: $("#actoInput"),
   actoCombo: $("#actoCombo"),
   condInput: $("#condInput"),
@@ -260,22 +282,52 @@ const formEls = {
 
 function openForm(type){
   state.formType = type;
+  state.hazardMode = "acto";
   formEls.title.textContent = type === "recorrido" ? "Recorrido de seguridad" : "Interacciones de seguridad";
   formEls.pill.textContent = type === "recorrido" ? "RECORRIDO" : "INTERACCIÓN";
-  formEls.autoDate.textContent = fmtDT(nowISO());
-  formEls.auditedGmin.value = "";
+  formEls.autoLine.textContent = (state.audited?.linea || "—");
+  formEls.autoShift.textContent = (state.audited?.turno || "—");
+formEls.auditedGmin.value = "";
   formEls.auditedName.textContent = "—";
   formEls.auditedPlant.textContent = "—";
   formEls.auditedLos.textContent = "—";
   formEls.auditedMgr.textContent = "—";
   formEls.actoInput.value = "";
   formEls.condInput.value = "";
+  // default selection: Acto
+  formEls.actoWrap.style.display = "block";
+  formEls.condWrap.style.display = "none";
+  formEls.pickActo.classList.add("active");
+  formEls.pickCond.classList.remove("active");
   formEls.comment.value = "";
   formEls.saveMsg.textContent = "";
   setView("form");
 }
 
 $("#formBack").addEventListener("click", () => setView("home"));
+
+// Toggle Acto vs Condición (solo una a la vez)
+formEls.pickActo.addEventListener("click", () => {
+  state.hazardMode = "acto";
+  formEls.actoWrap.style.display = "block";
+  formEls.condWrap.style.display = "none";
+  formEls.pickActo.classList.add("active");
+  formEls.pickCond.classList.remove("active");
+  formEls.condInput.value = "";
+  formEls.condCombo.classList.remove("show");
+  formEls.saveMsg.textContent = "";
+});
+formEls.pickCond.addEventListener("click", () => {
+  state.hazardMode = "cond";
+  formEls.actoWrap.style.display = "none";
+  formEls.condWrap.style.display = "block";
+  formEls.pickCond.classList.add("active");
+  formEls.pickActo.classList.remove("active");
+  formEls.actoInput.value = "";
+  formEls.actoCombo.classList.remove("show");
+  formEls.saveMsg.textContent = "";
+});
+
 
 function renderCombo(comboEl, items, onPick){
   comboEl.innerHTML = "";
@@ -320,16 +372,39 @@ formEls.auditedGmin.addEventListener("input", () => {
   const g = safe(formEls.auditedGmin.value);
   const p = g ? dirLookup(g) : null;
   if (!p){
+    state.audited = null;
     formEls.auditedName.textContent = g ? "No encontrado" : "—";
     formEls.auditedPlant.textContent = "—";
     formEls.auditedLos.textContent = "—";
     formEls.auditedMgr.textContent = "—";
+    formEls.autoLine.textContent = "—";
+    formEls.autoShift.textContent = "—";
     return;
   }
+
+  // Guardar perfil auditado en estado (para que se vaya al registro)
+  state.audited = {
+    gmin: p.gmin,
+    name: p.name,
+    plant: p.plant || "",
+    org: p.org || "",
+    manager: p.manager || "",
+    shift: p.shift || "",
+    turno: "",
+    linea: ""
+  };
+
+  const fallbackLine = (p.org || p.costCenter || "");
+  const tl = deriveTurnoLinea(state.audited.manager, p.shift, fallbackLine);
+  state.audited.turno = tl.turno || p.shift || "";
+  state.audited.linea = tl.linea || "";
+
   formEls.auditedName.textContent = p.name;
   formEls.auditedPlant.textContent = p.plant || "—";
   formEls.auditedLos.textContent = losLabel(p);
   formEls.auditedMgr.textContent = p.manager || "—";
+  formEls.autoLine.textContent = state.audited.linea || "—";
+  formEls.autoShift.textContent = state.audited.turno || "—";
 });
 
 async function saveRecord(andNew=false){
@@ -340,10 +415,17 @@ async function saveRecord(andNew=false){
   if (!auditedPerson) return toast(msg, "GMIN auditado no existe en directorio.");
   const acto = safe(formEls.actoInput.value);
   const cond = safe(formEls.condInput.value);
-  if (!acto) return toast(msg, "Selecciona Acto inseguro.");
-  if (!cond) return toast(msg, "Selecciona Condición insegura.");
+
+  // Solo una selección: Acto o Condición
+  if (state.hazardMode === "acto"){
+    if (!acto) return toast(msg, "Selecciona Acto inseguro.");
+  } else {
+    if (!cond) return toast(msg, "Selecciona Condición insegura.");
+  }
 
   const createdAt = nowISO();
+  const tl2 = deriveTurnoLinea(state.audited?.manager || state.audited?.mgr || state.audited?.managerName || state.audited?.manager, state.audited?.shift);
+  if (state.audited){ state.audited.turno = tl2.turno || state.audited.turno || ""; state.audited.linea = tl2.linea || state.audited.linea || ""; }
   const rec = {
     id: `${createdAt}_${Math.random().toString(16).slice(2)}`,
     type: state.formType,
@@ -358,7 +440,8 @@ async function saveRecord(andNew=false){
       lengthOfServiceYears: auditedPerson.lengthOfServiceYears,
       hireDate: auditedPerson.hireDate
     },
-    findings: { acto, condicion: cond },
+    hazardMode: state.hazardMode,
+    findings: { acto: state.hazardMode === "acto" ? acto : "", condicion: state.hazardMode === "cond" ? cond : "" },
     comment: safe(formEls.comment.value)
   };
 
@@ -382,53 +465,289 @@ $("#manualBack").addEventListener("click", () => setView("home"));
 
 async function openDashboard(){
   const all = await dbGetAll();
-  $("#dbTotal").textContent = all.length;
 
-  const countBy = (keyFn) => {
-    const m = new Map();
-    for (const r of all){
-      const k = keyFn(r);
-      if (!k) continue;
-      m.set(k, (m.get(k) || 0) + 1);
+  // Build filter option lists (from data + records)
+  const plants = Array.from(new Set(all.map(r => r.audited?.plant).filter(Boolean))).sort();
+  const shifts = Array.from(new Set(all.map(r => (r.audited?.turno || "")).filter(Boolean))).sort();
+
+  const fPlant = $("#fPlant");
+  const fShift = $("#fShift");
+  const fActo = $("#fActo");
+  const fCond = $("#fCond");
+
+  if (fPlant && fPlant.options.length <= 1){
+    for (const p of plants){
+      const o = document.createElement("option"); o.value = p; o.textContent = p; fPlant.appendChild(o);
     }
-    return m;
-  };
-
-  const topOf = (m) => {
-    let best = null, bestV = -1;
-    for (const [k,v] of m.entries()){
-      if (v > bestV){ bestV=v; best=k; }
+  }
+  if (fShift && fShift.options.length <= 1){
+    for (const s of shifts){
+      const o = document.createElement("option"); o.value = s; o.textContent = s; fShift.appendChild(o);
     }
-    return best || "—";
-  };
-
-  $("#dbActoTop").textContent = topOf(countBy(r => r.findings?.acto));
-  $("#dbCondTop").textContent = topOf(countBy(r => r.findings?.condicion));
-
-  // recent
-  const recent = all.slice().sort((a,b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 12);
-  const list = $("#recentList");
-  list.innerHTML = "";
-  if (!recent.length){
-    list.innerHTML = `<div class="item"><div class="itemTitle">Sin registros aún</div><div class="itemMeta">Registra un recorrido o interacción.</div></div>`;
-  }else{
-    for (const r of recent){
-      const div = document.createElement("div");
-      div.className = "item";
-      div.innerHTML = `
-        <div class="itemTop">
-          <div class="itemTitle">${r.type === "recorrido" ? "🛡️ Recorrido" : "🤝 Interacción"} • ${r.audited?.name || "—"}</div>
-          <div class="itemMeta">${fmtDT(r.createdAt)}</div>
-        </div>
-        <div class="itemMeta">Acto: <b>${r.findings?.acto || "—"}</b> • Condición: <b>${r.findings?.condicion || "—"}</b></div>
-        <div class="itemMeta">Registró: ${r.user?.name || "—"} (${r.user?.gmin || "—"}) • Plant: ${r.user?.plant || "—"}</div>
-      `;
-      list.appendChild(div);
+  }
+  if (fActo && fActo.options.length <= 1){
+    for (const a of state.actos){
+      const o = document.createElement("option"); o.value = a; o.textContent = a; fActo.appendChild(o);
+    }
+  }
+  if (fCond && fCond.options.length <= 1){
+    for (const c of state.condiciones){
+      const o = document.createElement("option"); o.value = c; o.textContent = c; fCond.appendChild(o);
     }
   }
 
+  const apply = () => {
+    const type = $("#fType")?.value || "all";
+    const from = $("#fFrom")?.value || "";
+    const to = $("#fTo")?.value || "";
+    const plant = $("#fPlant")?.value || "all";
+    const shift = $("#fShift")?.value || "all";
+    const user = safe($("#fUser")?.value || "");
+    const acto = $("#fActo")?.value || "all";
+    const cond = $("#fCond")?.value || "all";
+
+    const fromT = from ? new Date(from + "T00:00:00").getTime() : -Infinity;
+    const toT = to ? new Date(to + "T23:59:59").getTime() : Infinity;
+
+    const filtered = all.filter(r => {
+      if (type !== "all" && r.type !== type) return false;
+      const t = new Date(r.createdAt).getTime();
+      if (t < fromT || t > toT) return false;
+      if (plant !== "all" && (r.audited?.plant || "") !== plant) return false;
+      if (shift !== "all" && ((r.audited?.turno || "") !== shift)) return false;
+      if (user && (r.user?.gmin || "") !== user) return false;
+      if (acto !== "all" && (r.findings?.acto || "") !== acto) return false;
+      if (cond !== "all" && (r.findings?.condicion || "") !== cond) return false;
+      return true;
+    });
+
+    $("#dbTotal").textContent = filtered.length;
+
+    const countBy = (keyFn) => {
+      const mm = new Map();
+      for (const r of filtered){
+        const k = keyFn(r);
+        if (!k) continue;
+        mm.set(k, (mm.get(k) || 0) + 1);
+      }
+      return mm;
+    };
+    const topOf = (mm) => {
+      let best = null, bestV = -1;
+      for (const [k,v] of mm.entries()){
+        if (v > bestV){ bestV=v; best=k; }
+      }
+      return best || "—";
+    };
+
+    $("#dbActoTop").textContent = topOf(countBy(r => r.findings?.acto));
+    $("#dbCondTop").textContent = topOf(countBy(r => r.findings?.condicion));
+
+    renderRecent(filtered);
+    drawAllCharts(filtered);
+  };
+
+  $("#applyFilters")?.addEventListener("click", apply);
+
+  apply();
   setView("dashboard");
 }
+
+function renderRecent(records){
+  const recent = records.slice().sort((a,b) => (a.createdAt < b.createdAt ? 1 : -1)).slice(0, 12);
+  const list = $("#recentList");
+  list.innerHTML = "";
+  if (!recent.length){
+    list.innerHTML = `<div class="item"><div class="itemTitle">Sin registros con estos filtros</div><div class="itemMeta">Ajusta filtros o registra nuevos eventos.</div></div>`;
+    return;
+  }
+  for (const r of recent){
+    const div = document.createElement("div");
+    div.className = "item";
+    const acto = r.findings?.acto ? `Acto: <b>${r.findings.acto}</b>` : "";
+    const cond = r.findings?.condicion ? `Condición: <b>${r.findings.condicion}</b>` : "";
+    const mid = [acto, cond].filter(Boolean).join(" • ");
+    div.innerHTML = `
+      <div class="itemTop">
+        <div class="itemTitle">${r.type === "recorrido" ? "🛡️ Recorrido" : "🤝 Interacción"} • ${r.audited?.name || "—"}</div>
+        <div class="itemMeta">${fmtDT(r.createdAt)}</div>
+      </div>
+      <div class="itemMeta">${mid || "—"}</div>
+      <div class="itemMeta">Registró: ${r.user?.name || "—"} (${r.user?.gmin || "—"}) • Turno: ${(r.audited?.turno || r.user?.shift) || "—"} • Línea: ${(r.audited?.linea || r.user?.line) || "—"} • Plant auditado: ${r.audited?.plant || "—"}</div>
+    `;
+    list.appendChild(div);
+  }
+}
+
+// ---- Tiny charts (no libs)
+function drawBar(canvasId, labels, values){
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  const w = c.width = c.clientWidth * devicePixelRatio;
+  const h0 = (c.getAttribute("height") ? parseInt(c.getAttribute("height")) : 300);
+  const h = c.height = h0 * devicePixelRatio;
+  ctx.clearRect(0,0,w,h);
+
+  const padL = 22*devicePixelRatio;
+  const padR = 14*devicePixelRatio;
+  const padT = 14*devicePixelRatio;
+  const padB = 130*devicePixelRatio; // more room so labels never cut
+  const maxV = Math.max(1, ...values);
+  const n = Math.max(1, values.length);
+  const barW = (w - padL - padR) / n;
+
+  // baseline
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = "rgba(9,16,31,.55)";
+  ctx.lineWidth = 1*devicePixelRatio;
+  ctx.beginPath();
+  ctx.moveTo(padL, h-padB);
+  ctx.lineTo(w-padR, h-padB);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+  // If too many bars, skip some labels; otherwise show all
+  let step = 1;
+  if (n > 10){
+    const maxLabels = Math.max(4, Math.floor((w/devicePixelRatio) / 90));
+    step = Math.max(1, Math.ceil(n / maxLabels));
+  }
+
+  const wrap2 = (text) => {
+    const t = (text || "").trim();
+    if (!t) return ["", ""];
+    const parts = t.split(" ");
+    if (parts.length === 1) return [t, ""];
+    const mid = Math.ceil(parts.length/2);
+    return [parts.slice(0, mid).join(" "), parts.slice(mid).join(" ")];
+  };
+
+  // Dynamic label font size based on max label length
+  const maxLen = Math.max(1, ...labels.map(s => (s||"").length));
+  const labelPx = Math.max(9, Math.min(12, Math.round(12 - (maxLen>18 ? 2 : maxLen>14 ? 1 : 0))));
+  const labelFont = `${labelPx*devicePixelRatio}px system-ui`;
+
+  for (let i=0;i<n;i++){
+    const v = values[i] || 0;
+    const bh = (h - padT - padB) * (v / maxV);
+    const x = padL + i*barW + barW*0.12;
+    const y = (h - padB) - bh;
+    const bw = barW*0.76;
+
+    // bar
+    ctx.fillStyle = "rgba(9,16,31,.82)";
+    ctx.fillRect(x, y, bw, bh);
+
+    // value
+    ctx.fillStyle = "rgba(9,16,31,.92)";
+    ctx.font = `${12*devicePixelRatio}px system-ui`;
+    ctx.textAlign = "center";
+    ctx.fillText(String(v), x + bw/2, y - (6*devicePixelRatio));
+
+    // label
+    if (i % step === 0){
+      const raw = labels[i] || "";
+      const [l1, l2] = wrap2(raw);
+
+      ctx.fillStyle = "rgba(9,16,31,.92)";
+      ctx.font = labelFont;
+      const lx = x + bw/2;
+      const ly = h - (28*devicePixelRatio);
+
+      ctx.save();
+      ctx.translate(lx, ly);
+      ctx.rotate(-Math.PI/6); // -30°
+      ctx.textAlign = "center";
+      ctx.fillText(l1, 0, 0);
+      if (l2) ctx.fillText(l2, 0, 14*devicePixelRatio);
+      ctx.restore();
+    }
+  }
+}
+
+function drawTrend(canvasId, daily){
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext("2d");
+  const w = c.width = c.clientWidth * devicePixelRatio;
+  const h0 = (c.getAttribute("height") ? parseInt(c.getAttribute("height")) : 180);
+  const h = c.height = h0 * devicePixelRatio;
+  ctx.clearRect(0,0,w,h);
+
+  const padL = 18*devicePixelRatio;
+  const padR = 12*devicePixelRatio;
+  const padT = 12*devicePixelRatio;
+  const padB = 34*devicePixelRatio;
+
+  const labels = daily.map(d => d.day);
+  const values = daily.map(d => d.count);
+  const maxV = Math.max(1, ...values);
+
+  // grid
+  ctx.strokeStyle = "rgba(9,16,31,.20)";
+  ctx.lineWidth = 1*devicePixelRatio;
+  for (let i=0;i<4;i++){
+    const y = padT + i*(h-padT-padB)/3;
+    ctx.beginPath();
+    ctx.moveTo(padL, y);
+    ctx.lineTo(w-padR, y);
+    ctx.stroke();
+  }
+
+  // line
+  ctx.strokeStyle = "rgba(9,16,31,.85)";
+  ctx.lineWidth = 2.2*devicePixelRatio;
+  ctx.beginPath();
+  values.forEach((v,i) => {
+    const x = padL + i*(w-padL-padR)/Math.max(1, values.length-1);
+    const y = (h-padB) - (h-padT-padB)*(v/maxV);
+    if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // dots
+  ctx.fillStyle = "rgba(9,16,31,.85)";
+  values.forEach((v,i) => {
+    const x = padL + i*(w-padL-padR)/Math.max(1, values.length-1);
+    const y = (h-padB) - (h-padT-padB)*(v/maxV);
+    ctx.beginPath(); ctx.arc(x,y,3.2*devicePixelRatio,0,Math.PI*2); ctx.fill();
+  });
+
+  // labels density control
+  const maxLabels = Math.max(4, Math.floor((w/devicePixelRatio) / 70));
+  const step = Math.max(1, Math.ceil(labels.length / maxLabels));
+
+  ctx.fillStyle = "rgba(9,16,31,.92)";
+  ctx.font = `${11*devicePixelRatio}px system-ui`;
+  ctx.textAlign = "center";
+  labels.forEach((lab,i) => {
+    if (i % step !== 0) return;
+    const x = padL + i*(w-padL-padR)/Math.max(1, labels.length-1);
+    ctx.fillText(lab, x, h - (10*devicePixelRatio));
+  });
+}
+
+function topN(mm, n=6){
+  return Array.from(mm.entries()).sort((a,b) => b[1]-a[1]).slice(0,n);
+}
+
+function drawAllCharts(records){
+const mA = new Map();
+  const mC = new Map();
+  for (const r of records){
+    const a = r.findings?.acto || "";
+    const c = r.findings?.condicion || "";
+    if (a) mA.set(a, (mA.get(a)||0)+1);
+    if (c) mC.set(c, (mC.get(c)||0)+1);
+  }
+  const topA = topN(mA, 6);
+  const topC = topN(mC, 6);
+
+  drawBar("chartActos", topA.map(x=>x[0]), topA.map(x=>x[1]));
+  drawBar("chartConds", topC.map(x=>x[0]), topC.map(x=>x[1]));
+}
+
 
 $("#wipeBtn").addEventListener("click", async () => {
   await dbClear();
@@ -475,3 +794,104 @@ $("#exportBtn").addEventListener("click", exportCSV);
 
 // --------------------- Init
 boot();
+
+
+// --- Securito (offline playbook) ---
+let securitoPlaybook = null;
+
+async function loadSecuritoPlaybook(){
+  if (securitoPlaybook) return securitoPlaybook;
+  try{
+    const r = await fetch("./data/securito_playbook.json");
+    securitoPlaybook = await r.json();
+  }catch(e){
+    securitoPlaybook = {};
+  }
+  return securitoPlaybook;
+}
+
+function topContextFromRecords(records){
+  const acts = {};
+  const conds = {};
+  records.forEach(r=>{
+    if (r.acto) acts[r.acto] = (acts[r.acto]||0)+1;
+    if (r.condicion) conds[r.condicion] = (conds[r.condicion]||0)+1;
+  });
+  const topA = Object.entries(acts).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const topC = Object.entries(conds).sort((a,b)=>b[1]-a[1]).slice(0,3);
+  const fmt = (arr)=> arr.length ? arr.map(([k,v])=>`• ${k}: ${v}`).join("\n") : "—";
+  return { topA, topC, text: `Top Actos:\n${fmt(topA)}\n\nTop Condiciones:\n${fmt(topC)}` };
+}
+
+function secLog(who, txt){
+  const log = document.getElementById("secLog");
+  if (!log) return;
+  const row = document.createElement("div");
+  row.className = "msg";
+  row.innerHTML = `<div class="who">${who}</div><div class="txt"></div>`;
+  row.querySelector(".txt").textContent = txt;
+  log.appendChild(row);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function securitoAnswer(question, records){
+  const pb = await loadSecuritoPlaybook();
+  const ctx = topContextFromRecords(records);
+  const q = (question||"").toLowerCase();
+
+  // Try to match a known hallazgo keyword
+  const keys = Object.keys(pb);
+  const hit = keys.find(k => q.includes(k.toLowerCase())) || (ctx.topA[0]?.[0] || null);
+
+  if (!hit){
+    return `Necesito más datos.\n\n${ctx.text}\n\nDime cuál hallazgo quieres atacar (ej: 'uso de celular', 'casco de seguridad') y el objetivo (reducir %, semana, área).`;
+  }
+
+  const item = pb[hit] || {};
+  const camp = item["campaña"] || `Campaña enfocada a: ${hit}`;
+  const acciones = (item["acciones"]||[]).map(x=>`- ${x}`).join("\n") || "- Observación dirigida + plática corta + refuerzo visual.";
+  const contra = (item["contramedidas"]||[]).map(x=>`- ${x}`).join("\n") || "- Estandarizar método + poka-yoke.";
+
+  return `Objetivo sugerido: Reducir '${hit}' en 30% en 2 semanas.\n\nCampaña: ${camp}\n\nAcciones (rápidas):\n${acciones}\n\nContramedidas (raíz):\n${contra}\n\nContexto actual:\n${ctx.text}`;
+}
+
+function openSecurito(){
+  setView("securito");
+  const all = loadRecords();
+  const ctx = topContextFromRecords(all);
+  const box = document.getElementById("secTopContext");
+  if (box) box.textContent = ctx.text;
+  const log = document.getElementById("secLog");
+  if (log && !log.dataset.init){
+    log.dataset.init = "1";
+    secLog("Securito", "Estoy listo. Pregúntame qué campaña/acción/contramedida usar según tus hallazgos.");
+  }
+}
+
+document.addEventListener("click", (e)=>{
+  const t = e.target;
+  if (!t) return;
+  if (t.id === "secRefresh"){
+    const all = loadRecords();
+    const ctx = topContextFromRecords(all);
+    const box = document.getElementById("secTopContext");
+    if (box) box.textContent = ctx.text;
+  }
+  if (t.id === "secSend"){
+    const inp = document.getElementById("secInput");
+    const q = inp ? inp.value.trim() : "";
+    if (!q) return;
+    if (inp) inp.value = "";
+    secLog("Tú", q);
+    securitoAnswer(q, loadRecords()).then(ans => secLog("Securito", ans));
+  }
+});
+
+document.addEventListener("keydown", (e)=>{
+  if (e.key !== "Enter") return;
+  const inp = document.getElementById("secInput");
+  if (document.activeElement === inp){
+    const btn = document.getElementById("secSend");
+    if (btn) btn.click();
+  }
+});

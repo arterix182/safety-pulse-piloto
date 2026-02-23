@@ -3,19 +3,19 @@
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <meta name="theme-color" content="#0b1220"/>
+  <meta name="theme-color" content="#facc15"/>
   <link rel="manifest" href="manifest.webmanifest"/>
-  <link rel="icon" href="assets/logo.svg"/>
-  <title>Safety Pulse</title>
+  <link rel="icon" href="assets/logo.png"/>
+  <title>SAFETY APP</title>
   <link rel="stylesheet" href="styles.css"/>
 </head>
 <body>
   <div class="app">
     <header class="topbar">
       <div class="brand" role="button" tabindex="0" id="brandBtn" title="Inicio">
-        <img class="brandLogo" src="assets/logo.svg" alt="Logo"/>
+        <img class="brandLogo" src="assets/logo.webp" alt="Logo"/>
         <div class="brandText">
-          <div class="brandName">Safety Pulse</div>
+          <div class="brandName">SAFETY APP</div>
           <div class="brandSub" id="brandSub">Offline • GitHub Pages</div>
         </div>
       </div>
@@ -30,14 +30,13 @@
       <section class="view active" id="viewWelcome">
         <div class="center">
           <div class="splash">
-            <img src="assets/logo.svg" class="splashLogo" alt=""/>
+            <img src="assets/logo.webp" class="splashLogo" alt=""/>
             <div class="splashGlow"></div>
           </div>
-          <h1>Seguridad, sin fricción.</h1>
-          <p>Registra recorridos e interacciones. Todo queda asociado a tu usuario.</p>
+          <h1>SAFETY APP</h1>
+          <p>Registra recorridos e interacciones.</p>
           <button class="primary big" id="goLogin">Entrar</button>
-          <div class="hint" id="hintDir">Directorio: cargando…</div>
-        </div>
+</div>
       </section>
 
       <!-- View: Login -->
@@ -124,14 +123,18 @@
             <div class="pill" id="formTypePill">—</div>
           </div>
 
-          <div class="row2">
+          <div class="row3">
             <label class="field">
               <span>GMIN auditado</span>
               <input id="auditedGmin" inputmode="numeric" placeholder="GMIN auditado"/>
             </label>
             <div class="field read">
-              <span>Fecha / Hora</span>
-              <div class="readonly" id="autoDate">—</div>
+              <span>Línea</span>
+              <div class="readonly" id="autoLine">—</div>
+            </div>
+            <div class="field read">
+              <span>Turno</span>
+              <div class="readonly" id="autoShift">—</div>
             </div>
           </div>
 
@@ -157,17 +160,24 @@
             </div>
           </div>
 
-          <label class="field">
+          
+          <div class="seg">
+            <button class="segBtn active" id="pickActo" type="button">Acto inseguro</button>
+            <button class="segBtn" id="pickCond" type="button">Condición insegura</button>
+          </div>
+          <div class="hintSmall">Selecciona <b>solo una</b>: acto <i>o</i> condición.</div>
+
+<div id="actoWrap"><label class="field">
             <span>Acto inseguro</span>
             <input id="actoInput" placeholder="Buscar…"/>
             <div class="combo" id="actoCombo"></div>
-          </label>
+          </label></div>
 
-          <label class="field">
+          <div id="condWrap" style="display:none"><label class="field">
             <span>Condición insegura</span>
             <input id="condInput" placeholder="Buscar…"/>
             <div class="combo" id="condCombo"></div>
-          </label>
+          </label></div>
 
           <label class="field">
             <span>Comentario (opcional)</span>
@@ -188,12 +198,63 @@
       <section class="view" id="viewDashboard">
         <div class="card wide">
           <h2>Dashboard (Piloto local)</h2>
-          <p class="muted">Este piloto resume lo capturado en este dispositivo. En fase 2 lo hacemos global.</p>
+          <p class="muted">Filtra y visualiza lo capturado en este dispositivo. En fase 2 lo hacemos global.</p>
+
+          <div class="filters">
+            <div class="row3">
+              <label class="field">
+                <span>Tipo</span>
+                <select id="fType">
+                  <option value="all">Todos</option>
+                  <option value="recorrido">Recorrido</option>
+                  <option value="interaccion">Interacción</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Desde</span>
+                <input id="fFrom" type="date"/>
+              </label>
+              <label class="field">
+                <span>Hasta</span>
+                <input id="fTo" type="date"/>
+              </label>
+            </div>
+
+            <div class="row3">
+              <label class="field">
+                <span>Plant (auditado)</span>
+                <select id="fPlant"><option value="all">Todas</option></select>
+              </label>
+              <label class="field">
+                <span>Turno (auditado)</span>
+                <select id="fShift"><option value="all">Todos</option></select>
+              </label>
+              <label class="field">
+                <span>Registró (GMIN)</span>
+                <input id="fUser" placeholder="Ej. 123456"/>
+              </label>
+            </div>
+
+            <div class="row3">
+              <label class="field">
+                <span>Acto inseguro</span>
+                <select id="fActo"><option value="all">Todos</option></select>
+              </label>
+              <label class="field">
+                <span>Condición insegura</span>
+                <select id="fCond"><option value="all">Todas</option></select>
+              </label>
+              <div class="field">
+                <span>Acción</span>
+                <button class="ghost full" id="applyFilters">Aplicar filtros</button>
+              </div>
+            </div>
+          </div>
 
           <div class="row3">
             <div class="kpi bigkpi">
               <div class="kpiNum" id="dbTotal">0</div>
-              <div class="kpiLbl">Registros totales</div>
+              <div class="kpiLbl">Registros (filtrados)</div>
             </div>
             <div class="kpi bigkpi">
               <div class="kpiNum" id="dbActoTop">—</div>
@@ -205,7 +266,18 @@
             </div>
           </div>
 
-          <div class="list" id="recentList"></div>
+          <div class="charts">
+            <div class="chartCard">
+              <div class="chartTitle">Top Actos</div>
+              <canvas id="chartActos" height="320"></canvas>
+            </div>
+            <div class="chartCard">
+              <div class="chartTitle">Top Condiciones</div>
+              <canvas id="chartConds" height="320"></canvas>
+            </div>
+          </div>
+
+<div class="list" id="recentList"></div>
 
           <div class="actions">
             <button class="ghost" id="dashBack">Volver</button>
@@ -213,7 +285,7 @@
           </div>
           <div class="msg" id="wipeMsg"></div>
         </div>
-      </section>
+      </section></section>
 
       <!-- View: Manual -->
       <section class="view" id="viewManual">
@@ -232,13 +304,44 @@
           </div>
         </div>
       </section>
-    </main>
+    
+    <section class="view" id="viewSecurito" hidden>
+      <div class="card wide">
+        <div class="headerRow">
+          <div>
+            <div class="title">Securito 🤖🛡️</div>
+            <div class="sub">Dime el objetivo o el problema. Yo uso el Top de hallazgos para sugerir campaña, acciones y contramedidas.</div>
+          </div>
+          <div class="pill">AI (modo piloto)</div>
+        </div>
+
+        <div class="securitoGrid">
+          <div class="securitoPanel">
+            <div class="securitoTitle">Contexto automático</div>
+            <div class="securitoKpi" id="secTopContext">Sin datos aún. Genera registros y vuelve al dashboard.</div>
+            <button class="btn ghost" id="secRefresh">Actualizar contexto</button>
+          </div>
+
+          <div class="securitoChat">
+            <div class="chatLog" id="secLog"></div>
+            <div class="chatRow">
+              <input id="secInput" placeholder="Ej: ¿Qué campaña uso para reducir 'uso de celular'?" />
+              <button class="btn" id="secSend">Enviar</button>
+            </div>
+            <div class="hint">Securito funciona offline con un playbook. En fase 2 lo conectamos a IA real sin exponer llaves.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+</main>
 
     <footer class="bottombar" id="bottombar">
       <button class="navbtn active" data-nav="home">Inicio</button>
       <button class="navbtn" data-nav="recorrido">Recorrido</button>
       <button class="navbtn" data-nav="interaccion">Interacciones</button>
       <button class="navbtn" data-nav="dashboard">Dashboard</button>
+        <button class="navbtn" data-nav="securito">Securito</button>
       <button class="navbtn" data-nav="manual">Manual</button>
     </footer>
   </div>
