@@ -470,3 +470,67 @@ canvas{width:100%}
   .securitoGrid{grid-template-columns: 1fr;}
 }
 .toggleRow{display:flex; align-items:center; gap:10px; font-size:13px; opacity:.92; margin-top:8px;}
+
+/* --- V16 Securito voice buttons --- */
+#secTalk{min-width: 110px;}
+#secStop{min-width: 90px;}
+@media (max-width: 860px){
+  .chatRow{flex-wrap: wrap;}
+  #secTalk,#secStop{flex:0 0 auto;}
+  #secInput{flex:1 1 100%;}
+}
+
+
+/* V22: Securito hero + listening + mic level */
+.securitoHero{
+  position: relative;
+  border-radius: 22px;
+  overflow: hidden;
+  margin-top: 14px;
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(0,0,0,.15);
+}
+.securitoHeroImg{width:100%; height:auto; display:block;}
+.securitoHeroOverlay{
+  position:absolute; inset:0;
+  display:flex;
+  align-items:flex-end;
+  justify-content:flex-end;
+  padding: 18px;
+  pointer-events:none;
+}
+.heroBubble{
+  width: min(520px, 92%);
+  pointer-events:auto;
+  background: rgba(255, 214, 72, .88);
+  color: #141414;
+  border-radius: 22px;
+  padding: 16px 16px 14px 16px;
+  box-shadow: 0 22px 60px rgba(0,0,0,.35);
+}
+.heroTitle{font-weight:900; font-size:28px;}
+.heroText{margin-top:8px; font-size:15px; line-height:1.35; opacity:.92;}
+.heroControls{margin-top:14px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;}
+.micBtn{position:relative; min-width:120px;}
+.micDot{
+  width:10px; height:10px; border-radius:999px;
+  display:inline-block; margin-right:10px;
+  background: rgba(255,255,255,.55);
+}
+.micBtn.listening .micDot{
+  background:#12ff77;
+  box-shadow: 0 0 0 6px rgba(18,255,119,.25);
+  animation: secPulse 1s infinite;
+}
+@keyframes secPulse{0%{transform:scale(1);}50%{transform:scale(1.2);}100%{transform:scale(1);}}
+.micMeterWrap{display:flex; flex-direction:column; gap:6px; min-width:170px; margin-left:auto;}
+.micMeterLabel{font-size:12px; font-weight:800; opacity:.85;}
+.micMeter{
+  height:10px; border-radius:999px;
+  background: rgba(0,0,0,.18);
+  overflow:hidden;
+  border:1px solid rgba(0,0,0,.12);
+}
+.micMeterFill{height:100%; width:0%; background: rgba(16,180,80,.95); transition: width 90ms linear;}
+.heroToggles{margin-top:12px; display:flex; gap:14px; flex-wrap:wrap;}
+#secTopContext{white-space: pre-wrap; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:12px;}

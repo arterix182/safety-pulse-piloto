@@ -306,33 +306,58 @@
       </section>
     
     <section class="view" id="viewSecurito" hidden>
-      <div class="card wide">
-        <div class="headerRow">
-          <div>
-            <div class="title">Securito 🤖🛡️</div>
-            <div class="sub">Dime el objetivo o el problema. Yo uso el Top de hallazgos para sugerir campaña, acciones y contramedidas.</div>
-          </div>
-          <div class="pill">AI (modo piloto)</div>
-        </div>
+  <div class="card wide">
+    <div class="headerRow">
+      <div>
+        <div class="title">Securito 🤖🛡️</div>
+        <div class="sub">Dime el objetivo o el problema. Yo uso tu Top de hallazgos para sugerir campaña, acciones y contramedidas.</div>
+      </div>
+      <div class="pill">AI (modo piloto)</div>
+    </div>
 
-        <div class="securitoGrid">
-          <div class="securitoPanel">
-            <div class="securitoTitle">Contexto automático</div>
-            <div class="securitoKpi" id="secTopContext">Sin datos aún. Genera registros y vuelve al dashboard.</div>
-            <button class="btn ghost" id="secRefresh">Actualizar contexto</button>
-          </div>
+    <div class="securitoHero">
+      <img class="securitoHeroImg" src="./assets/securito_hero.webp" alt="Securito"/>
+      <div class="securitoHeroOverlay">
+        <div class="heroBubble">
+          <div class="heroTitle">¡Hola! Soy Securito.</div>
+          <div class="heroText">¿En qué puedo ayudarte para mejorar la seguridad en planta?</div>
 
-          <div class="securitoChat">
-            <div class="chatLog" id="secLog"></div>
-            <div class="chatRow">
-              <input id="secInput" placeholder="Ej: ¿Qué campaña uso para reducir 'uso de celular'?" />
-              <button class="btn" id="secSend">Enviar</button>
+          <div class="heroControls">
+            <button class="btn micBtn" id="secTalk"><span class="micDot"></span>Hablar</button>
+            <button class="btn ghost" id="secStop">Detener</button>
+
+            <div class="micMeterWrap">
+              <div class="micMeterLabel" id="secListenLabel">Listo</div>
+              <div class="micMeter"><div class="micMeterFill" id="secMicFill"></div></div>
             </div>
-            <div class="hint">Securito funciona offline con un playbook. En fase 2 lo conectamos a IA real sin exponer llaves.</div>
+          </div>
+
+          <div class="heroToggles">
+            <label class="toggleRow"><input type="checkbox" id="secVoice" checked> <span>Responder con voz</span></label>
+            <label class="toggleRow"><input type="checkbox" id="secAnime" checked> <span>Tono caricatura/anime</span></label>
           </div>
         </div>
       </div>
-    </section>
+    </div>
+
+    <div class="securitoGrid">
+      <div class="securitoPanel">
+        <div class="securitoTitle">Contexto automático</div>
+        <pre class="securitoKpi" id="secTopContext">Cargando…</pre>
+        <button class="btn ghost" id="secRefresh">Actualizar contexto</button>
+      </div>
+
+      <div class="securitoChat">
+        <div class="chatLog" id="secLog"></div>
+        <div class="chatRow">
+          <input id="secInput" placeholder="Ej: ¿Qué campaña uso para reducir 'uso de celular'?" />
+          <button class="btn" id="secSend">Enviar</button>
+        </div>
+        <div class="hint">Securito funciona offline con playbook. En fase 2 lo conectamos a IA real sin exponer llaves.</div>
+      </div>
+    </div>
+  </div>
+</section>
 
 </main>
 
