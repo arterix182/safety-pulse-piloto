@@ -323,14 +323,10 @@
         <div class="title">Securito 🤖🛡️</div>
         <div class="sub">Habla o escribe. Yo sugiero campañas, acciones y contramedidas basadas en tus hallazgos.</div>
       </div>
-      <div class="secHeaderRight">
-        <button class="iconBtn" id="secAiSettingsBtn" type="button" title="Ajustes de IA">
-          <span class="icon">⚙️</span>
-          <span class="iconText">IA</span>
-        </button>
-        <div class="pill" id="secAiPill">IA OFF</div>
-      </div>
+      <div class="secHeaderRight"><div class="pill" id="secAiPill">IA ON</div></div>
     </div>
+
+
 
     <div class="securitoSplit">
       <div class="securitoAvatarCard">
@@ -356,12 +352,7 @@
           </div>
         </div>
 
-        <div class="heroToggles">
-          <label class="toggleRow"><input type="checkbox" id="secVoice" checked> <span>Responder con voz</span></label>
-          <label class="toggleRow"><input type="checkbox" id="secAnime" checked> <span>Tono caricatura/anime</span></label>
-        </div>
-
-        <div class="heroNote" id="secSttNote">Si tu navegador no soporta dictado, escribe a la derecha y yo respondo con voz.</div>
+        
       </div>
 
       <div class="securitoChatCard">
@@ -395,49 +386,5 @@
 
   <script type="module" src="app.js?v=40"></script>
 
-  <!-- Securito IA Settings Modal -->
-  <div class="modalOverlay" id="secAiModal" aria-hidden="true">
-    <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="secAiTitle">
-      <div class="modalHead">
-        <div>
-          <div class="modalTitle" id="secAiTitle">Securito • IA (Nube)</div>
-          <div class="modalSub">IA profesional vía servidor (sin CORS). La app puede guardar offline y sincronizar al volver.</div>
-        </div>
-        <button class="iconBtn" id="secAiClose" type="button" title="Cerrar">✖</button>
-      </div>
-
-      <div class="modalBody">
-        <label class="toggleRow bigToggle">
-          <input type="checkbox" id="secAiEnabled">
-          <span><b>Usar IA para respuestas</b> (mejor razonamiento y redacción)</span>
-        </label>
-
-        <div class="grid2">
-          <div class="field">
-            <div class="label">API Key (opcional)</div>
-            <input id="secAiKey" placeholder="(opcional)" autocomplete="off" spellcheck="false"/>
-            <div class="help">En modo profesional la llave vive en el servidor (recomendado). Este campo queda para pruebas locales si tú lo decides.</div>
-          </div>
-          <div class="field">
-            <div class="label">Modelo</div>
-            <select id="secAiModel">
-              <option value="gpt-4.1-mini">gpt-4.1-mini (rápido)</option>
-              <option value="gpt-4.1">gpt-4.1 (mejor calidad)</option>
-              <option value="gpt-5">gpt-5 (si tu cuenta lo permite)</option>
-            </select>
-            <div class="help">Si un modelo falla, verás el error para corregirlo (variables de entorno / deploy).</div>
-          </div>
-        </div>
-
-        <div class="modalActions">
-          <button class="btn ghost" id="secAiTest" type="button">Probar conexión</button>
-          <button class="ctaMini" id="secAiSave" type="button">Guardar</button>
-        </div>
-
-        <div class="modalFoot" id="secAiStatus">—</div>
-      </div>
-    </div>
-  </div>
-
-</body>
+  </body>
 </html>

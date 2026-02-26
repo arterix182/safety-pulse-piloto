@@ -154,14 +154,18 @@ function nowISO(){
   return new Date().toISOString();
 }
 
-function deriveTurnoLinea(manager, fallbackShift, fallbackLine){
-  const m = (manager || "").toString().trim().toLowerCase();
-  // Reglas piloto (puedes expandir un catálogo de managers -> línea/turno)
-  if (m.includes("arturo ampudia pacheco") || m.includes("arturo ampudia")){
-    return { turno: "Tripulación A", linea: "Chasis 1" };
+function deriveTurnoLinea(managerName, fallbackShift, fallbackLine){
+  // Si el manager está en la tabla de managers, usamos su área/turno como verdad.
+  const meta = managerMetaFromName(managerName);
+  if (meta){
+    return {
+      turno: tripLabelFromTurno(meta.turno),
+      linea: lineLabelFromArea(meta.area)
+    };
   }
   return { turno: (fallbackShift || ""), linea: (fallbackLine || "") };
 }
+
 
 
 function fmtDT(iso){
@@ -171,6 +175,38 @@ function fmtDT(iso){
   }catch{return iso}
 }
 function safe(s){ return (s ?? "").toString().trim(); }
+
+function normName(s){
+  return safe(s).toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g," ").trim();
+}
+function lineLabelFromArea(area){
+  const a = safe(area);
+  if (!a) return "";
+  // Prefer friendly labels
+  if (/^C\d(\b|\/)/.test(a)){
+    const m = a.match(/^C(\d)/);
+    return m ? `Chasis ${m[1]}` : a;
+  }
+  if (a === "C1") return "Chasis 1";
+  if (a === "C2") return "Chasis 2";
+  return a;
+}
+function tripLabelFromTurno(turno){
+  const t = safe(turno);
+  return t ? `Tripulación ${t}` : "";
+}
+function managerMetaFromName(managerName){
+  const target = normName(managerName);
+  const byG = state.managers?.byGmin || {};
+  for (const k in byG){
+    const m = byG[k];
+    if (normName(m.manager) === target) return m;
+  }
+  return null;
+}
+
 
 function losLabel(person){
   const yrs = person?.lengthOfServiceYears;
@@ -367,15 +403,16 @@ function renderUserHeader(){
   const u = state.user;
   $("#userBadge").textContent = `${u.gmin} • ${u.plant || "Plant —"}`;
   $("#hello").textContent = `Hola, ${u.name}`;
+
   const meta = [
-    u.org ? `Org: ${u.org}` : null,
     u.manager ? `Manager: ${u.manager}` : null,
     u.shift ? `Shift: ${u.shift}` : null,
-    u.isManager ? `Área: ${u.area || "—"}` : null,
-    u.isManager ? `Turno: ${u.turno || "—"}` : null
+    u.isManager ? `Línea: ${lineLabelFromArea(u.area) || "—"}` : null,
+    u.isManager ? `Turno: ${tripLabelFromTurno(u.turno) || "—"}` : null
   ].filter(Boolean).join(" • ");
   $("#userMeta").textContent = meta || "—";
 }
+
 
 async function refreshHomeKPIs(){
   let all = await dbGetAll();
@@ -794,15 +831,28 @@ function drawBar(canvasId, labels, values){
   const c = document.getElementById(canvasId);
   if (!c) return;
   const ctx = c.getContext("2d");
-  const w = c.width = c.clientWidth * devicePixelRatio;
-  const h0 = (c.getAttribute("height") ? parseInt(c.getAttribute("height")) : 300);
-  const h = c.height = h0 * devicePixelRatio;
+  const dpr = window.dpr || 1;
+
+  // ✅ Fix: avoid “growing canvas” on each redraw.
+  // Setting c.height changes the element’s height attribute; if we read it again next time and multiply by dpr,
+  // the backing store height explodes. We keep an unscaled base height in data-base-height.
+  const baseH = parseInt(c.dataset.baseHeight || c.getAttribute("data-base-height") || c.getAttribute("height") || "320", 10);
+  if (!c.dataset.baseHeight) c.dataset.baseHeight = String(baseH);
+
+  // Make CSS size stable; backing store scales by dpr.
+  c.style.width = "100%";
+  c.style.height = baseH + "px";
+
+  const rect = c.getBoundingClientRect();
+  const w = c.width = Math.max(1, Math.round(rect.width * dpr));
+  const h = c.height = Math.max(1, Math.round(baseH * dpr));
+
   ctx.clearRect(0,0,w,h);
 
-  const padL = 22*devicePixelRatio;
-  const padR = 14*devicePixelRatio;
-  const padT = 14*devicePixelRatio;
-  const padB = 130*devicePixelRatio; // more room so labels never cut
+  const padL = 22*dpr;
+  const padR = 14*dpr;
+  const padT = 14*dpr;
+  const padB = 130*dpr; // more room so labels never cut
   const maxV = Math.max(1, ...values);
   const n = Math.max(1, values.length);
   const barW = (w - padL - padR) / n;
@@ -810,7 +860,7 @@ function drawBar(canvasId, labels, values){
   // baseline
   ctx.globalAlpha = 0.55;
   ctx.strokeStyle = "rgba(9,16,31,.55)";
-  ctx.lineWidth = 1*devicePixelRatio;
+  ctx.lineWidth = 1*dpr;
   ctx.beginPath();
   ctx.moveTo(padL, h-padB);
   ctx.lineTo(w-padR, h-padB);
@@ -820,7 +870,7 @@ function drawBar(canvasId, labels, values){
   // If too many bars, skip some labels; otherwise show all
   let step = 1;
   if (n > 10){
-    const maxLabels = Math.max(4, Math.floor((w/devicePixelRatio) / 90));
+    const maxLabels = Math.max(4, Math.floor((w/dpr) / 90));
     step = Math.max(1, Math.ceil(n / maxLabels));
   }
 
@@ -836,7 +886,7 @@ function drawBar(canvasId, labels, values){
   // Dynamic label font size based on max label length
   const maxLen = Math.max(1, ...labels.map(s => (s||"").length));
   const labelPx = Math.max(9, Math.min(12, Math.round(12 - (maxLen>18 ? 2 : maxLen>14 ? 1 : 0))));
-  const labelFont = `${labelPx*devicePixelRatio}px system-ui`;
+  const labelFont = `${labelPx*dpr}px system-ui`;
 
   for (let i=0;i<n;i++){
     const v = values[i] || 0;
@@ -851,9 +901,9 @@ function drawBar(canvasId, labels, values){
 
     // value
     ctx.fillStyle = "rgba(9,16,31,.92)";
-    ctx.font = `${12*devicePixelRatio}px system-ui`;
+    ctx.font = `${12*dpr}px system-ui`;
     ctx.textAlign = "center";
-    ctx.fillText(String(v), x + bw/2, y - (6*devicePixelRatio));
+    ctx.fillText(String(v), x + bw/2, y - (6*dpr));
 
     // label
     if (i % step === 0){
@@ -863,14 +913,14 @@ function drawBar(canvasId, labels, values){
       ctx.fillStyle = "rgba(9,16,31,.92)";
       ctx.font = labelFont;
       const lx = x + bw/2;
-      const ly = h - (28*devicePixelRatio);
+      const ly = h - (28*dpr);
 
       ctx.save();
       ctx.translate(lx, ly);
       ctx.rotate(-Math.PI/6); // -30°
       ctx.textAlign = "center";
       ctx.fillText(l1, 0, 0);
-      if (l2) ctx.fillText(l2, 0, 14*devicePixelRatio);
+      if (l2) ctx.fillText(l2, 0, 14*dpr);
       ctx.restore();
     }
   }
@@ -1013,126 +1063,48 @@ let securitoPlaybook = null;
 // --- Securito IA (BYOK) ---
 // Nota: La llave se guarda SOLO en este dispositivo (localStorage). IA obligatoria: sin llave no hay respuestas.
 const SEC_AI_STORE = "securito_ai_settings_v1";
-let secAi = { enabled:false, key:"", model:"gpt-4.1-mini" };
+let secAi = { enabled:true, key:"", model:"gpt-4.1-mini" };
 
 function secAiLoad(){
+  // IA siempre activa (modo profesional). No mostramos engranes ni toggle.
   try{
     const raw = localStorage.getItem(SEC_AI_STORE);
     if (raw){
       const obj = JSON.parse(raw);
       secAi = {
-        enabled: !!obj.enabled,
-        key: String(obj.key||""),
-        model: String(obj.model||"gpt-4.1-mini")
+        enabled: true,
+        key: "", // la llave vive en el servidor (Netlify env)
+        model: String(obj.model || "gpt-4.1-mini")
       };
+    } else {
+      secAi.enabled = true;
+      secAi.key = "";
     }
-  }catch(e){}
+  }catch(e){
+    secAi.enabled = true;
+    secAi.key = "";
+  }
   secAiUpdatePill();
 }
 function secAiSave(next){
-  secAi = {...secAi, ...next};
-  try{ localStorage.setItem(SEC_AI_STORE, JSON.stringify(secAi)); }catch(e){}
+  try{
+    const obj = next || {};
+    secAi = {
+      enabled: true,
+      key: "",
+      model: String(obj.model || secAi.model || "gpt-4.1-mini")
+    };
+    localStorage.setItem(SEC_AI_STORE, JSON.stringify({ model: secAi.model }));
+  }catch(e){}
   secAiUpdatePill();
 }
 function secAiUpdatePill(){
   const pill = document.getElementById("secAiPill");
   if (!pill) return;
-  if (secAi.enabled && secAi.key){
-    pill.textContent = `IA ON • ${secAi.model}`;
-    pill.style.borderColor = "rgba(34,197,94,.45)";
-    pill.style.background = "rgba(34,197,94,.10)";
-  } else {
-    pill.textContent = "IA requerida";
-    pill.style.borderColor = "";
-    pill.style.background = "";
-  }
-
+  pill.textContent = `IA ON • ${secAi.model || "gpt-4.1-mini"}`;
+  pill.style.borderColor = "rgba(34,197,94,.45)";
+  pill.style.background = "rgba(34,197,94,.10)";
 }
-
-function secAiModal(show){
-  const m = document.getElementById("secAiModal");
-  if (!m) return;
-  if (show){
-    m.classList.add("show");
-    m.setAttribute("aria-hidden","false");
-    // hydrate fields
-    const en = document.getElementById("secAiEnabled");
-    const k = document.getElementById("secAiKey");
-    const model = document.getElementById("secAiModel");
-    const st = document.getElementById("secAiStatus");
-    if (en) en.checked = !!secAi.enabled;
-    if (k) k.value = secAi.key || "";
-    if (model) model.value = secAi.model || "gpt-4.1-mini";
-    if (st) st.textContent = "—";
-  } else {
-    m.classList.remove("show");
-    m.setAttribute("aria-hidden","true");
-  }
-}
-
-function secAiInitUI(){
-  // Open modal
-  document.addEventListener("click", (e)=>{
-    const t = e.target;
-    if (!t) return;
-
-    if (t.id === "secAiSettingsBtn"){
-      secAiLoad();
-      secAiModal(true);
-    }
-    if (t.id === "secAiClose"){
-      secAiModal(false);
-    }
-    if (t.id === "secAiModal"){
-      secAiModal(false);
-    }
-    if (t.id === "secAiSave"){
-      const en = document.getElementById("secAiEnabled");
-      const k = document.getElementById("secAiKey");
-      const model = document.getElementById("secAiModel");
-      secAiSave({
-        enabled: !!en?.checked,
-        key: String(k?.value||"").trim(),
-        model: String(model?.value||"gpt-4.1-mini")
-      });
-      const st = document.getElementById("secAiStatus");
-      if (st) st.textContent = secAi.enabled ? "Guardado ✅ IA activa." : "Guardado ✅ IA desactivada.";
-      setTimeout(()=>secAiModal(false), 450);
-    }
-    if (t.id === "secAiTest"){
-      secAiLoad();
-      const st = document.getElementById("secAiStatus");
-      if (st) st.textContent = "Probando…";
-      const en = document.getElementById("secAiEnabled");
-      const k = document.getElementById("secAiKey");
-      const model = document.getElementById("secAiModel");
-      const temp = {
-        enabled: !!en?.checked,
-        key: String(k?.value||"").trim(),
-        model: String(model?.value||"gpt-4.1-mini")
-      };
-      // Test cloud endpoint (no CORS, IA server-side)
-      (async ()=>{
-        try{
-          const ok = await cloudHealth();
-          if (!ok) throw new Error("Nube no disponible");
-          // Quick ping to AI
-          const out = await callSecuritoAI({ question: "Responde solo 'OK'", user: state.user || {} });
-          if (st) st.textContent = (out && out.toUpperCase().includes("OK")) ? "Conexión OK ✅" : "Conectó, pero respuesta inesperada.";
-        }catch(err){
-          if (st) st.textContent = "Falló ❌ Revisa deploy (Netlify Functions) y variables de entorno.";
-        }
-      })();
-    }
-  });
-
-  // ESC closes
-  document.addEventListener("keydown", (e)=>{
-    if (e.key === "Escape") secAiModal(false);
-  });
-}
-
-secAiInitUI();
 
 async function callSecuritoAI({question, user}){
   const r = await fetch("/.netlify/functions/chat", {
@@ -1177,7 +1149,7 @@ async function securitoAnswerSmart(question, records){
   secAiLoad();
   try{
     if (!secAi.enabled){
-      return "IA está desactivada. Abre **IA (⚙️)** y habilita 'Usar IA para respuestas'.";
+      return "IA no está disponible. Verifica configuración del servidor (Netlify env vars).";
     }
     const ai = await callSecuritoAI({ question, user: state.user });
     return ai || "No recibí respuesta de IA. Intenta de nuevo.";
@@ -1372,31 +1344,97 @@ document.addEventListener("keydown", (e)=>{
 
 let __secAudio = null;
 
+let __secAudioUnlocked = false;
+let __secUnlockEl = null;
+
+function ensureSecAudioEl(){
+  // Use a single <audio> element to improve iOS behavior.
+  if (__secAudio && __secAudio.tagName === "AUDIO") return __secAudio;
+  const existing = document.getElementById("secAudioEl");
+  __secAudio = existing || document.createElement("audio");
+  __secAudio.id = __secAudio.id || "secAudioEl";
+  __secAudio.preload = "auto";
+  __secAudio.playsInline = true;
+  __secAudio.setAttribute("playsinline","");
+  __secAudio.setAttribute("webkit-playsinline","");
+  __secAudio.style.display = "none";
+  if (!existing) document.body.appendChild(__secAudio);
+  return __secAudio;
+}
+
+function showAudioUnlockPrompt(onUnlock){
+  if (__secUnlockEl) return;
+  const div = document.createElement("div");
+  div.className = "audioUnlock";
+  div.innerHTML = `
+    <div class="audioUnlockCard">
+      <div class="audioUnlockTitle">Activa audio</div>
+      <div class="audioUnlockSub">En algunos celulares el navegador bloquea audio hasta que tocas un botón.</div>
+      <button class="btn btnPrimary" id="audioUnlockBtn">Activar</button>
+    </div>
+  `;
+  document.body.appendChild(div);
+  __secUnlockEl = div;
+  div.querySelector("#audioUnlockBtn").addEventListener("click", async () => {
+    try{
+      // Attempt to "unlock" audio with a short silent play.
+      const a = ensureSecAudioEl();
+      a.src = "";
+      // Some browsers accept play() even with empty src; others need a data URL.
+      a.src = "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAAAAAWGluZwAAAA8AAAACAAACcQCA"+ 
+              "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+      await a.play().catch(()=>{});
+      a.pause();
+      a.currentTime = 0;
+      __secAudioUnlocked = true;
+    }catch(e){}
+    try{ __secUnlockEl.remove(); }catch(e){}
+    __secUnlockEl = null;
+    try{ onUnlock && onUnlock(); }catch(e){}
+  });
+}
+
 async function speak(text){
   const t = String(text||"").trim();
   if (!t) return;
 
-  // Always prefer Cloud TTS so the voice is consistent across devices.
+  // Prefer Cloud TTS so the voice is consistent across devices.
+  // Fix: do NOT start mouth animation until audio actually starts playing.
   try{
-    __secIsSpeaking = true;
     __secLastSpoken = t;
     try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
     __secAsrRunning = false;
-    toggleSecuritoTalking(true);
+    __secIsSpeaking = false;
+    try{ setSecuritoState("thinking"); stopSecuritoBlink(); }catch(e){}
 
     const r = await fetch("/.netlify/functions/tts", {
       method:"POST",
       headers:{"content-type":"application/json"},
-      body: JSON.stringify({ text: t })
+      body: JSON.stringify({ text: t }),
+      cache:"no-store"
     });
 
     if (r.ok){
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
-      if (__secAudio){ try{ __secAudio.pause(); }catch(e){} }
-      __secAudio = new Audio(url);
-      __secAudio.onended = ()=>{
+      if (__secAudio){ try{ __secAudio.pause(); __secAudio.src=""; }catch(e){} }
+      __secAudio = ensureSecAudioEl();
+      // Reset and attach the new blob URL
+      try{ __secAudio.pause(); }catch(e){}
+      __secAudio.src = url;
+      __secAudio.load();
+
+
+      const cleanup = ()=>{
         try{ URL.revokeObjectURL(url); }catch(e){}
+      };
+
+      __secAudio.onplaying = ()=>{
+        __secIsSpeaking = true;
+        toggleSecuritoTalking(true);
+      };
+      __secAudio.onended = ()=>{
+        cleanup();
         toggleSecuritoTalking(false);
         __secIsSpeaking = false;
         if (typeof __secAutoListen !== "undefined" && __secAutoListen){
@@ -1407,17 +1445,31 @@ async function speak(text){
         }
       };
       __secAudio.onerror = ()=>{
+        cleanup();
         toggleSecuritoTalking(false);
         __secIsSpeaking = false;
       };
-      await __secAudio.play();
+
+      // Play ASAP. On mobile, autoplay may be blocked unless the user has performed a gesture.
+      try{
+        await __secAudio.play();
+      }catch(err){
+        // If blocked, show a one-time “tap to enable audio” prompt and retry.
+        const msg = (err && (err.name||err.message)) || "";
+        const blocked = /NotAllowedError|play\(\) failed|gesture/i.test(msg);
+        if (!__secAudioUnlocked && blocked){
+          showAudioUnlockPrompt(async ()=>{
+            try{ await __secAudio.play(); }catch(e){}
+          });
+        }
+      }
       return;
     }
   }catch(e){
     // fall through to local speechSynthesis
   }
 
-  // Fallback (device voice). Not ideal, but better than silence.
+// Fallback (device voice). Not ideal, but better than silence.
   try{
     if (!("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(t);
@@ -1604,14 +1656,8 @@ async function sendToSecurito(q, opts={}){
 
   secLog("Securito", ans);
 
-  const voiceOn = document.getElementById("secVoice");
-  const anime = document.getElementById("secAnime");
-  if (voiceOn?.checked){
-    // Cloud TTS keeps the voice consistent across devices.
-    speak(ans);
-  } else {
-    try{ setSecuritoState("idle"); startSecuritoBlink(); }catch(e){}
-  }
+  // Responder siempre con voz (TTS nube) para consistencia multi-dispositivo.
+  speak(ans);
 }
 
 document.addEventListener("click", (e)=>{
@@ -1998,8 +2044,6 @@ function escapeHtml(str){
   }
 
   function talk(text){
-    const voiceOn = document.getElementById("secVoice")?.checked;
-    if (!voiceOn) return;
     speak(text);
   }
 

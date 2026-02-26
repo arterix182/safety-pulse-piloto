@@ -814,3 +814,48 @@ canvas{width:100%}
 @media (max-width:720px){
   .grid2{grid-template-columns: 1fr}
 }
+
+
+/* ----------------- Mobile polish (no cutoffs) ----------------- */
+:root{ --safeTop: env(safe-area-inset-top, 0px); --safeBottom: env(safe-area-inset-bottom, 0px); }
+
+@media (max-width: 560px){
+  body{ padding-bottom: calc(84px + var(--safeBottom)); }
+  .container{ padding: 12px; }
+  .card{ border-radius: 18px; }
+  .topbar{ padding-top: calc(10px + var(--safeTop)); }
+  .tabs{ gap: 8px; padding-bottom: calc(10px + var(--safeBottom)); }
+  .tabs .tab{ font-size: 12px; padding: 10px 10px; }
+  .grid2, .grid3{ grid-template-columns: 1fr !important; }
+  .row{ flex-direction: column; align-items: stretch; gap: 10px; }
+  .btn{ width: 100%; }
+  .modal{ width: calc(100vw - 18px); margin: 9px; max-height: calc(100vh - 18px); }
+  .modalBody{ max-height: calc(100vh - 170px); overflow:auto; }
+  canvas{ max-width: 100%; }
+}
+
+@media (max-width: 420px){
+  .brandTitle{ font-size: 18px; }
+  .heroTitle{ font-size: 36px; }
+  .heroSub{ font-size: 14px; }
+  .pill{ font-size: 11px; }
+}
+
+/* One-time audio unlock prompt (shows only if mobile blocks playback) */
+.audioUnlock{
+  position: fixed; inset: 0;
+  display:flex; align-items:flex-end; justify-content:center;
+  padding: 18px; padding-bottom: calc(18px + var(--safeBottom));
+  background: rgba(0,0,0,.35);
+  z-index: 9999;
+}
+.audioUnlockCard{
+  width: min(520px, 100%);
+  background: rgba(15,26,47,.92);
+  border: 1px solid rgba(255,255,255,.10);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+.audioUnlockTitle{ font-weight: 800; font-size: 16px; margin-bottom: 6px; }
+.audioUnlockSub{ color: var(--muted); font-size: 13px; margin-bottom: 12px; }
