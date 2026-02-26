@@ -1188,6 +1188,49 @@ function isFollowUpMessage(txt){
   return /^(por favor|porfa|si|sí|ok|va|dale|correcto|bien|continua|continúe|continua\.|continua\!|aj[aá]$|m[aá]s|mas|detalle(s)?|explica|ejemplo(s)?|hazlo|adelante)$/i.test(t);
 }
 
+function localSecuritoFallback(userText, ctx, opts={}){
+  const tRaw = String(userText||"").trim();
+  const t = tRaw.toLowerCase();
+  const name = (ctx?.user?.name || ctx?.user?.MANAGER || ctx?.user?.manager || ctx?.name || ""); // best-effort
+  const who = name ? name.split(" ")[0] : "compa";
+
+  const isGreeting = /^(hola|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|hey|qué\s+tal|que\s+tal|saludos)(\b|!|\.|,|$)/i.test(tRaw);
+  const isMeta = /(por\s+qu[eé]\s+hablas\s+as[ií]|por\s+qu[eé]\s+no\s+respondes|qué\s+eres|quien\s+eres|quién\s+eres)/i.test(tRaw);
+
+  // If it's a follow-up like "por favor" keep the last safety topic
+  const followUp = typeof isFollowUpMessage === "function" ? isFollowUpMessage(tRaw) : false;
+  const lastQ = window.__securitoLastSafetyQ || "";
+  const lastA = window.__securitoLastSafetyA || "";
+  const lastTopic = window.__securitoLastSafetyTopic || "";
+
+  if (isGreeting){
+    return `¡Hola, ${who}! 👋 Soy Securito. Estoy para *seguridad industrial* (EPP, actos/condiciones inseguras, LOTO, montacargas, ergonomía, evacuación).\n\nDime: **¿qué viste y en dónde?** y te doy campaña + acciones + contramedidas.`;
+  }
+
+  if (isMeta){
+    return `Te respondo claro, ${who}: mi chamba es **seguridad industrial**. Hablo directo para prevenir riesgos y ayudarte con acciones.\n\nCuéntame tu caso: **¿qué hallazgo viste y en qué área/estación?**`;
+  }
+
+  // EPP quick knowledge (instant)
+  const mentionsEPP = /(\bepp\b|\bppe\b|casco|lentes|guantes|chaleco|arn[eé]s|arnes|botas?|calzado)/i.test(tRaw);
+  const wantsDetails = followUp || /(detall|ejempl|m[aá]s|recomend|gu[ií]a|plan)/i.test(tRaw);
+
+  if ((mentionsEPP && wantsDetails) || (followUp && /epp|ppe|casco|lentes|guantes|chaleco|arnes/i.test(lastQ+lastA))){
+    window.__securitoLastSafetyTopic = "epp";
+    return `Perfecto, ${who}. **EPP correcto** (rápido y práctico):\n\n1) **Casco**: ajuste firme + barboquejo si aplica; sin grietas; no lo uses “de gorra”.\n2) **Lentes**: puestos todo el tiempo en piso; limpios; sin rayas fuertes.\n3) **Guantes**: el tipo correcto (corte/abrasión/químico) y en buen estado.\n4) **Calzado**: amarre completo, suela buena, puntera/antideslizante.\n5) **Chaleco** (si hay tráfico): alta visibilidad y sin piezas sueltas.\n\nDime tu **área/estación** y el **riesgo principal** (montacargas, torque, altura, químico) y te digo el EPP exacto + los 3 errores típicos a corregir.`;
+  }
+
+  // If it's a follow-up but unclear, tie back to last context
+  if (followUp && (lastQ || lastA)){
+    return `Va, ${who}. Siguiendo con eso: dime **en qué área/estación** estás y qué quieres lograr (campaña, corrección inmediata o prevención) y lo aterrizo en pasos claros.`;
+  }
+
+  // Default: stay on safety but avoid technical error text
+  return `Te escucho, ${who}. Yo me enfoco en **seguridad**.\n\nDime esto en 1 línea:\n- **Hallazgo** (acto/condición/EPP)\n- **Dónde** (área/estación)\n- **Riesgo** (golpe, atrapamiento, caída, químico, montacargas)\n\nY te regreso **acción inmediata + contramedida + prevención**.`;
+}
+
+
+
 
 
 // Fast friendly responses for greetings / meta questions (keeps "solo seguridad" but not rude)
@@ -1274,7 +1317,7 @@ async function securitoAnswerSmart(question, records){
     return ai || "No recibí respuesta de IA. Intenta de nuevo.";
   }catch(e){
     console.warn("Securito IA falló:", e?.message || e);
-    return "IA no disponible en este momento (servidor/modelo). Abre **IA (⚙️)** y prueba conexión. Si falla, revisa el deploy y variables de entorno.";
+    return localSecuritoFallback(userText, ctx, {reason:"ia_unavailable"});
   }
 }
 

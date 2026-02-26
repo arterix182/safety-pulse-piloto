@@ -26,7 +26,8 @@ function isSafetyTopic(txt){
 
 async function openaiChat(messages, tools){
 
-  const key = requireEnv("OPENAI_API_KEY");
+  const key = process.env.OPENAI_API_KEY;
+  if(!key) throw new Error("IA_NOT_CONFIGURED");
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -227,6 +228,8 @@ const user = body?.user || {};
 
     return json(200, { ok:true, answer: msg?.content || "" });
   }catch(e){
-    return json(500, { ok:false, error: e.message || String(e) });
+    const msg = e?.message || String(e);
+    const status = msg === "IA_NOT_CONFIGURED" ? 503 : 500;
+    return json(status, { ok:false, error: msg });
   }
 }
