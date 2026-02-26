@@ -26,7 +26,7 @@ async function openaiChat(messages, tools){
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
       temperature: 0.2,
-      max_tokens: 260,
+      max_tokens: 190,
       messages,
       tools,
       tool_choice: tools?.length ? "auto" : undefined
@@ -93,10 +93,40 @@ export async function handler(event){
 
     if (!question) return json(400, { ok:false, error:"Pregunta vacía" });
     if (!isSafetyTopic(question)){
-      return json(200, { ok:true, answer:"Soy Securito y mi función es apoyar con seguridad. Si tienes una situación de seguridad, cuéntame y te ayudo." });
+      const meta = body?.meta || {};
+      // Allow short follow-ups like "por favor" if we have prior safety context
+      if (meta?.followUp && meta?.lastSafetyQuestion){
+        // Merge previous safety question with follow-up
+      } else {
+        return json(200, { ok:true, answer:"Soy Securito y mi función es apoyar con **seguridad industrial**. Puedo ayudarte con EPP, actos/condiciones inseguras, LOTO, montacargas, ergonomía, evacuación y prevención. Si me dices tu situación de seguridad (¿qué viste y en dónde?), te doy acciones concretas." });
+      }
     }
 
-    const user = body?.user || {};
+    
+    const meta = body?.meta || {};
+    let effectiveQuestion = question;
+    if (meta?.followUp && meta?.lastSafetyQuestion){
+      effectiveQuestion = `${meta.lastSafetyQuestion}\n\n[El usuario insiste/da seguimiento]: ${question}`;
+    }
+
+    // Fast-path for EPP/PPE to reduce latency on mobile (no OpenAI call)
+    if (/(\bepp\b|\bppe\b|equipo de protecci[oó]n personal|casco|lentes|guantes|chaleco|arn[eé]s|calzado)/i.test(effectiveQuestion)){
+      const line = (body?.user?.linea || body?.user?.line || body?.user?.area || "").toString().trim();
+      const trip = (body?.user?.turno || body?.user?.trip || "").toString().trim();
+      const plant = (body?.user?.plant || "").toString().trim();
+      const ctx = [plant && `Planta: ${plant}`, line && `Línea/Área: ${line}`, trip && `Tripulación/Turno: ${trip}`].filter(Boolean).join(" • ");
+      const answer =
+        `Para **EPP correcto** (${ctx || "según tu área"}), aplica esto:\n\n`+
+        `1) **Casco**: ajuste firme, sin grietas; barbiquejo si aplica.\n`+
+        `2) **Lentes**: siempre en piso (no en la frente); limpios y sin rayas fuertes.\n`+
+        `3) **Guantes**: el tipo correcto (corte/abrasión/químico). Cambia si están rotos o contaminados.\n`+
+        `4) **Calzado**: punta y suela en buen estado; amarre completo.\n`+
+        `5) **Alta visibilidad**: chaleco visible, sin piezas sueltas.\n`+
+        `6) **Regla de oro**: si el riesgo cambia, **cambia el EPP**.\n\n`+
+        `Dime **qué operación** (torque, altura, químicos, montacargas, etc.) y te digo el EPP exacto y los 3 errores típicos a corregir.`;
+      return json(200, { ok:true, answer });
+    }
+const user = body?.user || {};
     if (!question) return json(400, { ok:false, error:"Missing question" });
 
     const tools = [

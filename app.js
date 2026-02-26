@@ -859,7 +859,7 @@ function drawBar(canvasId, labels, values){
 
   // baseline
   ctx.globalAlpha = 0.55;
-  ctx.strokeStyle = "rgba(9,16,31,.55)";
+  ctx.strokeStyle = "rgba(255,255,255,.28)";
   ctx.lineWidth = 1*dpr;
   ctx.beginPath();
   ctx.moveTo(padL, h-padB);
@@ -896,11 +896,13 @@ function drawBar(canvasId, labels, values){
     const bw = barW*0.76;
 
     // bar
-    ctx.fillStyle = "rgba(9,16,31,.82)";
+    ctx.fillStyle = "rgba(34,197,94,.92)";
     ctx.fillRect(x, y, bw, bh);
 
     // value
-    ctx.fillStyle = "rgba(9,16,31,.92)";
+    ctx.fillStyle = "rgba(255,255,255,.96)";
+    ctx.shadowColor = "rgba(0,0,0,.35)";
+    ctx.shadowBlur = 6*dpr;
     ctx.font = `${12*dpr}px system-ui`;
     ctx.textAlign = "center";
     ctx.fillText(String(v), x + bw/2, y - (6*dpr));
@@ -910,7 +912,9 @@ function drawBar(canvasId, labels, values){
       const raw = labels[i] || "";
       const [l1, l2] = wrap2(raw);
 
-      ctx.fillStyle = "rgba(9,16,31,.92)";
+      ctx.fillStyle = "rgba(255,255,255,.96)";
+      ctx.shadowColor = "rgba(0,0,0,.35)";
+      ctx.shadowBlur = 6*dpr;
       ctx.font = labelFont;
       const lx = x + bw/2;
       const ly = h - (28*dpr);
@@ -945,7 +949,7 @@ function drawTrend(canvasId, daily){
   const maxV = Math.max(1, ...values);
 
   // grid
-  ctx.strokeStyle = "rgba(9,16,31,.20)";
+  ctx.strokeStyle = "rgba(255,255,255,.22)";
   ctx.lineWidth = 1*devicePixelRatio;
   for (let i=0;i<4;i++){
     const y = padT + i*(h-padT-padB)/3;
@@ -967,7 +971,7 @@ function drawTrend(canvasId, daily){
   ctx.stroke();
 
   // dots
-  ctx.fillStyle = "rgba(9,16,31,.85)";
+  ctx.fillStyle = "rgba(255,255,255,.92)";
   values.forEach((v,i) => {
     const x = padL + i*(w-padL-padR)/Math.max(1, values.length-1);
     const y = (h-padB) - (h-padT-padB)*(v/maxV);
@@ -1106,8 +1110,8 @@ function secAiUpdatePill(){
   pill.style.background = "rgba(34,197,94,.10)";
 }
 
-async function callSecuritoAI({question, user}){
-  const payload = JSON.stringify({ question, user });
+async function callSecuritoAI({question, user, meta}){
+  const payload = JSON.stringify({ question, user, meta });
 
   const doFetch = async (timeoutMs)=>{
     const ac = new AbortController();
@@ -1177,15 +1181,63 @@ function isSafetyTopic(txt){
   ];
   return kws.some(k=>t.includes(k));
 }
+// Follow-up messages that depend on previous safety context (e.g., "por favor", "sí", "ok")
+function isFollowUpMessage(txt){
+  const t = String(txt||"").trim().toLowerCase();
+  if (!t) return false;
+  return /^(por favor|porfa|si|sí|ok|va|dale|correcto|bien|continua|continúe|continua\.|continua\!|aj[aá]$|m[aá]s|mas|detalle(s)?|explica|ejemplo(s)?|hazlo|adelante)$/i.test(t);
+}
+
+// Very fast local answers for common safety topics (reduces mobile latency)
+function fastSafetyAnswer(question, user){
+  const q = String(question||"").toLowerCase();
+  const line = (user?.linea || user?.line || user?.area || "").toString().trim();
+  const trip = (user?.turno || user?.trip || "").toString().trim();
+  const plant = (user?.plant || "").toString().trim();
+
+  // EPP / PPE
+  if (/(\bepp\b|\bppe\b|equipo de protecci[oó]n personal|casco|lentes|guantes|chaleco|arn[eé]s|calzado)/i.test(q)){
+    const ctx = [plant && `Planta: ${plant}`, line && `Línea/Área: ${line}`, trip && `Tripulación/Turno: ${trip}`].filter(Boolean).join(" • ");
+    return `Para **EPP correcto** (${ctx || "según tu área"}), aplica esto:\n\n` +
+      `1) **Casco**: bien ajustado (arnés interno firme), sin grietas; barbiquejo si aplica.\n` +
+      `2) **Lentes**: siempre en piso (no en la frente); limpios y sin rayas fuertes.\n` +
+      `3) **Guantes**: el tipo correcto (corte/abrasión/químico). Cambia si están rotos o contaminados.\n` +
+      `4) **Calzado**: punta y suela en buen estado; amarre completo.\n` +
+      `5) **Chaleco/alta visibilidad**: visible y sin piezas sueltas.\n` +
+      `6) **Regla de oro**: si el riesgo cambia (herramienta/altura/químicos), **cambia el EPP**.\n\n` +
+      `Dime **qué operación** estás auditando (ej. torque, montacargas, altura, químicos) y te digo el EPP exacto y los 3 errores típicos a corregir.`;
+  }
+  return null;
+}
+
 
 async function securitoAnswerSmart(question, records){
+
+  // Keep last safety question for follow-ups like "por favor"
+  window.__securitoLastSafetyQ = window.__securitoLastSafetyQ || "";
+  window.__securitoLastSafetyA = window.__securitoLastSafetyA || "";
+
+  // If user sends a follow-up (e.g., "por favor"), reuse last safety context
+  const followUp = isFollowUpMessage(question) && !!window.__securitoLastSafetyQ;
+  const effectiveQuestion = followUp
+    ? `${window.__securitoLastSafetyQ}\n\n[El usuario insiste/da seguimiento]: ${question}`
+    : question;
+
+  // Ultra-fast local answer for frequent topics (reduces mobile latency)
+  const fast = fastSafetyAnswer(effectiveQuestion, window.currentUser || {});
+  if (fast){
+    window.__securitoLastSafetyQ = effectiveQuestion;
+    window.__securitoLastSafetyA = fast;
+    return fast;
+  }
   // Sin modo offline: IA obligatoria.
   secAiLoad();
   try{
     if (!secAi.enabled){
       return "IA no está disponible. Verifica configuración del servidor (Netlify env vars).";
     }
-    const ai = await callSecuritoAI({ question, user: state.user });
+    const ai = await callSecuritoAI({ question: effectiveQuestion, user: state.user, meta: { followUp, lastSafetyQuestion: window.__securitoLastSafetyQ } });
+    if (ai){ window.__securitoLastSafetyQ = effectiveQuestion; window.__securitoLastSafetyA = ai; }
     return ai || "No recibí respuesta de IA. Intenta de nuevo.";
   }catch(e){
     console.warn("Securito IA falló:", e?.message || e);
