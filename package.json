@@ -1,0 +1,9 @@
+{
+  "name": "securito-cloud",
+  "version": "40.0.0",
+  "type": "module",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}

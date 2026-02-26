@@ -222,6 +222,25 @@ button.ghost{background: rgba(255,255,255,.04)}
   background: rgba(250,204,21,.10);
   color: rgba(231,238,252,.95);
 }
+
+/* Cloud sync badge */
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .2px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: rgba(8,14,26,.30);
+  color: rgba(231,238,252,.96);
+  backdrop-filter: blur(10px);
+}
+.chip.ok{border-color: rgba(96,255,158,.35); box-shadow: 0 0 18px rgba(96,255,158,.18)}
+.chip.warn{border-color: rgba(255,215,64,.35); box-shadow: 0 0 18px rgba(255,215,64,.16)}
+.chip.bad{border-color: rgba(255,92,122,.35); box-shadow: 0 0 18px rgba(255,92,122,.16)}
 .actions{display:flex; gap:10px; justify-content:flex-end; flex-wrap:wrap; margin-top:10px}
 .list{margin-top:12px; display:flex; flex-direction:column; gap:10px}
 .item{
@@ -606,4 +625,178 @@ canvas{width:100%}
 }
 .securitoAvatarWrap .securitoRobot.is-active{
   transform: none !important;
+}
+
+
+
+/* =============================
+   V36 – Welcome logo + CTA
+   ============================= */
+
+.splashPro{perspective: 900px;}
+.splashFloat{
+  animation: splashFloat 3.8s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+@keyframes splashFloat{
+  0%,100%{transform: translateY(0) rotateX(8deg) rotateY(-10deg) scale(1);}
+  50%{transform: translateY(-8px) rotateX(14deg) rotateY(10deg) scale(1.02);}
+}
+
+.splashRing{
+  position:absolute; inset: -10px;
+  border-radius: 999px;
+  background:
+    conic-gradient(from 140deg,
+      rgba(34,197,94,.0),
+      rgba(34,197,94,.75),
+      rgba(250,204,21,.85),
+      rgba(34,197,94,.65),
+      rgba(34,197,94,.0));
+  filter: blur(.2px);
+  opacity: .75;
+  animation: ringSpin 2.6s linear infinite;
+  mask: radial-gradient(circle, transparent 58%, #000 60%);
+}
+@keyframes ringSpin{to{transform: rotate(360deg)}}
+
+.splashSpark{
+  position:absolute; inset: -22px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 20% 35%, rgba(250,204,21,.55), transparent 28%),
+    radial-gradient(circle at 70% 28%, rgba(34,197,94,.55), transparent 24%),
+    radial-gradient(circle at 58% 78%, rgba(250,204,21,.35), transparent 26%),
+    radial-gradient(circle at 30% 78%, rgba(34,197,94,.28), transparent 22%);
+  filter: blur(10px);
+  opacity:.65;
+  animation: sparkPulse 1.9s ease-in-out infinite;
+}
+@keyframes sparkPulse{0%,100%{transform: scale(.98); opacity:.55}50%{transform: scale(1.05); opacity:.9}}
+
+.ctaLaunch{
+  position:relative;
+  width:min(360px, 92vw);
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255,255,255,.14);
+  background: linear-gradient(135deg, rgba(8,14,26,.55), rgba(10,18,34,.25));
+  color: rgba(240,245,255,.95);
+  cursor:pointer;
+  overflow:hidden;
+  box-shadow: 0 18px 44px rgba(0,0,0,.45);
+  transition: transform .12s ease, filter .12s ease;
+}
+.ctaLaunch:hover{transform: translateY(-1px); filter: brightness(1.06)}
+.ctaLaunch:active{transform: translateY(0px) scale(.99)}
+.ctaLaunch .ctaFx{
+  position:absolute; inset:-2px;
+  background: conic-gradient(from 180deg,
+    rgba(34,197,94,.00),
+    rgba(34,197,94,.60),
+    rgba(250,204,21,.70),
+    rgba(34,197,94,.55),
+    rgba(34,197,94,.00));
+  opacity:.85;
+  animation: ringSpin 1.9s linear infinite;
+  mask: radial-gradient(circle, transparent 62%, #000 64%);
+}
+.ctaLaunch::before{
+  content:"";
+  position:absolute; inset:0;
+  background: radial-gradient(circle at 20% 0%, rgba(250,204,21,.25), transparent 35%),
+              radial-gradient(circle at 80% 120%, rgba(34,197,94,.20), transparent 40%);
+  opacity:.9;
+}
+.ctaLaunch .ctaText{
+  position:relative;
+  display:block;
+  font-weight: 900;
+  letter-spacing: .5px;
+  font-size: 18px;
+}
+.ctaLaunch .ctaSub{
+  position:relative;
+  display:block;
+  font-size: 12px;
+  opacity: .85;
+  margin-top: 2px;
+}
+
+/* =============================
+   V36 – Modal + IA settings
+   ============================= */
+
+.secHeaderRight{display:flex; align-items:center; gap:10px}
+.iconBtn{
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border:1px solid rgba(255,255,255,.12);
+  background: rgba(8,14,26,.35);
+  color: rgba(231,238,252,.92);
+  cursor:pointer;
+  transition: transform .12s ease, filter .12s ease;
+}
+.iconBtn:hover{transform: translateY(-1px); filter: brightness(1.08)}
+.iconBtn:active{transform: translateY(0)}
+.iconBtn .icon{font-size:14px}
+.iconBtn .iconText{font-size:12px; font-weight:800; opacity:.9}
+
+.modalOverlay{
+  position:fixed; inset:0;
+  display:none;
+  align-items:center; justify-content:center;
+  padding: 18px;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(8px);
+  z-index: 1000;
+}
+.modalOverlay.show{display:flex;}
+.modalCard{
+  width: min(820px, 96vw);
+  border-radius: 22px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(180deg, rgba(16,31,58,.92), rgba(10,18,34,.88));
+  box-shadow: 0 28px 80px rgba(0,0,0,.55);
+  overflow:hidden;
+}
+.modalHead{
+  display:flex; justify-content:space-between; align-items:flex-start;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.10);
+}
+.modalTitle{font-weight: 900; letter-spacing:.2px}
+.modalSub{font-size:12px; color: var(--muted); margin-top: 2px}
+.modalBody{padding: 14px 16px}
+.bigToggle{padding: 10px 12px; border-radius: 16px; border:1px solid rgba(255,255,255,.10); background: rgba(8,14,26,.25)}
+.grid2{display:grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px}
+.field .label{font-size:12px; color: var(--muted); margin-bottom: 6px}
+.field input, .field select{
+  width:100%;
+  padding: 11px 12px;
+  border-radius: 14px;
+  border:1px solid rgba(255,255,255,.14);
+  background: rgba(3,7,16,.35);
+  color: rgba(240,245,255,.95);
+  outline:none;
+}
+.field input:focus, .field select:focus{border-color: rgba(34,197,94,.55)}
+.help{font-size:11px; color: rgba(231,238,252,.65); margin-top: 6px}
+
+.modalActions{display:flex; justify-content:flex-end; gap:10px; margin-top: 12px}
+.ctaMini{
+  border:none;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, rgba(34,197,94,.92), rgba(250,204,21,.92));
+  color:#06101f;
+  font-weight:900;
+  cursor:pointer;
+}
+.modalFoot{margin-top: 10px; font-size: 12px; color: rgba(231,238,252,.75)}
+
+/* Mobile */
+@media (max-width:720px){
+  .grid2{grid-template-columns: 1fr}
 }

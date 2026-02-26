@@ -7,7 +7,7 @@
   <link rel="manifest" href="manifest.webmanifest"/>
   <link rel="icon" href="assets/logo.png"/>
   <title>SAFETY APP</title>
-  <link rel="stylesheet" href="styles.css?v=33"/>
+  <link rel="stylesheet" href="styles.css?v=36"/>
 </head>
 <body>
   <div class="app">
@@ -16,7 +16,7 @@
         <img class="brandLogo" src="assets/logo.webp" alt="Logo"/>
         <div class="brandText">
           <div class="brandName">SAFETY APP</div>
-          <div class="brandSub" id="brandSub">Offline • GitHub Pages</div>
+          <div class="brandSub" id="brandSub">Securito • Seguridad</div>
         </div>
       </div>
       <div class="topActions">
@@ -29,13 +29,19 @@
       <!-- View: Welcome -->
       <section class="view active" id="viewWelcome">
         <div class="center">
-          <div class="splash">
-            <img src="assets/logo.webp" class="splashLogo" alt=""/>
+          <div class="splash splashPro" aria-label="Logo animado">
+            <div class="splashRing" aria-hidden="true"></div>
+            <div class="splashSpark" aria-hidden="true"></div>
+            <img src="assets/logo.webp" class="splashLogo splashFloat" alt=""/>
             <div class="splashGlow"></div>
           </div>
           <h1>SAFETY APP</h1>
           <p>Registra recorridos e interacciones.</p>
-          <button class="primary big" id="goLogin">Entrar</button>
+          <button class="ctaLaunch" id="goLogin" type="button">
+            <span class="ctaFx" aria-hidden="true"></span>
+            <span class="ctaText">Desplegar</span>
+            <span class="ctaSub">Entrar a operación</span>
+          </button>
 </div>
       </section>
 
@@ -197,8 +203,13 @@
       <!-- View: Dashboard -->
       <section class="view" id="viewDashboard">
         <div class="card wide">
-          <h2>Dashboard (Piloto local)</h2>
-          <p class="muted">Filtra y visualiza lo capturado en este dispositivo. En fase 2 lo hacemos global.</p>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div>
+              <h2 style="margin:0">Dashboard (Nube)</h2>
+              <p class="muted" style="margin:6px 0 0">Datos centralizados y sincronización automática. Si no hay red, guarda y sincroniza al volver.</p>
+            </div>
+            <div id="cloudBadge" class="chip" title="Estado de sincronización">☁️ Verificando…</div>
+          </div>
 
           <div class="filters">
             <div class="row3">
@@ -312,7 +323,13 @@
         <div class="title">Securito 🤖🛡️</div>
         <div class="sub">Habla o escribe. Yo sugiero campañas, acciones y contramedidas basadas en tus hallazgos.</div>
       </div>
-      <div class="pill">Offline (piloto)</div>
+      <div class="secHeaderRight">
+        <button class="iconBtn" id="secAiSettingsBtn" type="button" title="Ajustes de IA">
+          <span class="icon">⚙️</span>
+          <span class="iconText">IA</span>
+        </button>
+        <div class="pill" id="secAiPill">IA OFF</div>
+      </div>
     </div>
 
     <div class="securitoSplit">
@@ -358,7 +375,7 @@
           <button class="btn" id="secSend" type="button">Enviar</button>
         </div>
 
-        <div class="hint">Securito funciona offline con un playbook. Fase 2: IA real sin exponer llaves.</div>
+        <div class="hint">Securito usa IA (vía proxy). Sin IA activa, no responde.</div>
       </div>
     </div>
   </div>
@@ -376,6 +393,51 @@
     </footer>
   </div>
 
-  <script type="module" src="app.js?v=33"></script>
+  <script type="module" src="app.js?v=40"></script>
+
+  <!-- Securito IA Settings Modal -->
+  <div class="modalOverlay" id="secAiModal" aria-hidden="true">
+    <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="secAiTitle">
+      <div class="modalHead">
+        <div>
+          <div class="modalTitle" id="secAiTitle">Securito • IA (Nube)</div>
+          <div class="modalSub">IA profesional vía servidor (sin CORS). La app puede guardar offline y sincronizar al volver.</div>
+        </div>
+        <button class="iconBtn" id="secAiClose" type="button" title="Cerrar">✖</button>
+      </div>
+
+      <div class="modalBody">
+        <label class="toggleRow bigToggle">
+          <input type="checkbox" id="secAiEnabled">
+          <span><b>Usar IA para respuestas</b> (mejor razonamiento y redacción)</span>
+        </label>
+
+        <div class="grid2">
+          <div class="field">
+            <div class="label">API Key (opcional)</div>
+            <input id="secAiKey" placeholder="(opcional)" autocomplete="off" spellcheck="false"/>
+            <div class="help">En modo profesional la llave vive en el servidor (recomendado). Este campo queda para pruebas locales si tú lo decides.</div>
+          </div>
+          <div class="field">
+            <div class="label">Modelo</div>
+            <select id="secAiModel">
+              <option value="gpt-4.1-mini">gpt-4.1-mini (rápido)</option>
+              <option value="gpt-4.1">gpt-4.1 (mejor calidad)</option>
+              <option value="gpt-5">gpt-5 (si tu cuenta lo permite)</option>
+            </select>
+            <div class="help">Si un modelo falla, verás el error para corregirlo (variables de entorno / deploy).</div>
+          </div>
+        </div>
+
+        <div class="modalActions">
+          <button class="btn ghost" id="secAiTest" type="button">Probar conexión</button>
+          <button class="ctaMini" id="secAiSave" type="button">Guardar</button>
+        </div>
+
+        <div class="modalFoot" id="secAiStatus">—</div>
+      </div>
+    </div>
+  </div>
+
 </body>
 </html>

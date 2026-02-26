@@ -20,6 +20,83 @@ const state = {
   hazardMode: "acto" // 'acto' or 'cond'
 };
 
+// --------------------- Cloud (Supabase via Netlify Functions)
+const CLOUD = {
+  base: "/.netlify/functions",
+  enabled: false,
+  lastError: "",
+  syncing: false
+};
+
+function setCloudBadge(text, kind="warn"){
+  const el = document.getElementById("cloudBadge");
+  if (!el) return;
+  el.textContent = text;
+  el.classList.remove("ok","warn","bad");
+  el.classList.add(kind);
+}
+
+async function cloudHealth(){
+  try{
+    const r = await fetch(`${CLOUD.base}/health`, { cache:"no-store" });
+    if (!r.ok) throw new Error(`health ${r.status}`);
+    const j = await r.json();
+    CLOUD.enabled = !!j?.ok;
+    CLOUD.lastError = "";
+    setCloudBadge("☁️ Nube OK", "ok");
+    return true;
+  }catch(e){
+    CLOUD.enabled = false;
+    CLOUD.lastError = e?.message || String(e);
+    setCloudBadge("☁️ Offline (guardando local)", "warn");
+    return false;
+  }
+}
+
+async function cloudCreateRecord(rec){
+  const r = await fetch(`${CLOUD.base}/incidents-create`, {
+    method: "POST",
+    headers: { "content-type":"application/json" },
+    body: JSON.stringify({ record: rec })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok || !j.ok) throw new Error(j?.error || `create ${r.status}`);
+  return j;
+}
+
+async function cloudListRecords(params={}){
+  const qs = new URLSearchParams(params);
+  const r = await fetch(`${CLOUD.base}/incidents-list?${qs.toString()}`, { cache:"no-store" });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok || !j.ok) throw new Error(j?.error || `list ${r.status}`);
+  return j.records || [];
+}
+
+async function cloudSyncPending(){
+  if (!CLOUD.enabled || CLOUD.syncing) return;
+  CLOUD.syncing = true;
+  try{
+    const all = await dbGetAll();
+    const pending = all.filter(r => r?.sync?.status === "pending");
+    if (!pending.length){ setCloudBadge("☁️ Sin pendientes", "ok"); return; }
+    setCloudBadge(`☁️ Sincronizando ${pending.length}…`, "warn");
+    for (const rec of pending){
+      try{
+        const out = await cloudCreateRecord(rec);
+        rec.sync = { status:"synced", cloudId: out.id, at: nowISO() };
+        rec.cloudId = out.id;
+        await dbPutRecord(rec);
+      }catch(e){
+        rec.sync = { status:"pending", lastError: e?.message || String(e), at: nowISO() };
+        await dbPutRecord(rec);
+      }
+    }
+    setCloudBadge("☁️ Sincronizado", "ok");
+  }finally{
+    CLOUD.syncing = false;
+  }
+}
+
 // --------------------- IndexedDB (tiny wrapper)
 const DB_NAME = "safety_pulse_db";
 const DB_VER = 1;
@@ -155,7 +232,15 @@ async function boot(){
   if (saved){
     try{ state.user = JSON.parse(saved); }catch{}
   }
+
+  // Cloud health + auto sync hooks
+  await cloudHealth();
+  window.addEventListener("online", async ()=>{ await cloudHealth(); await cloudSyncPending(); });
+  window.addEventListener("offline", ()=>{ setCloudBadge("☁️ Offline (guardando local)", "warn"); });
+
   if (state.user){
+    // If user is logged, try to flush any pending records to cloud
+    try{ await cloudSyncPending(); }catch(e){}
     await refreshHomeKPIs();
     renderUserHeader();
     setView("home");
@@ -231,7 +316,10 @@ function renderUserHeader(){
 }
 
 async function refreshHomeKPIs(){
-  const all = await dbGetAll();
+  let all = await dbGetAll();
+  if (CLOUD.enabled){
+    try{ all = await cloudListRecords({ limit: 2000 }); }catch(e){}
+  }
   const rec = all.filter(r => r.type === "recorrido").length;
   const inter = all.filter(r => r.type === "interaccion").length;
   $("#kpiRec").textContent = rec;
@@ -448,11 +536,26 @@ async function saveRecord(andNew=false){
     },
     hazardMode: state.hazardMode,
     findings: { acto: state.hazardMode === "acto" ? acto : "", condicion: state.hazardMode === "cond" ? cond : "" },
-    comment: safe(formEls.comment.value)
+    comment: safe(formEls.comment.value),
+    sync: { status: (CLOUD.enabled ? "pending" : "pending"), at: nowISO() }
   };
 
   await dbPutRecord(rec);
-  toast(msg, "Guardado. Quedó asociado a tu usuario.", true);
+  toast(msg, CLOUD.enabled ? "Guardado. Enviando a la nube…" : "Guardado local (sin red). Se sincroniza al volver.", true);
+  // Best-effort cloud push
+  if (CLOUD.enabled){
+    try{
+      const out = await cloudCreateRecord(rec);
+      rec.sync = { status:"synced", cloudId: out.id, at: nowISO() };
+      rec.cloudId = out.id;
+      await dbPutRecord(rec);
+      setCloudBadge("☁️ Sincronizado", "ok");
+    }catch(e){
+      rec.sync = { status:"pending", lastError: e?.message || String(e), at: nowISO() };
+      await dbPutRecord(rec);
+      setCloudBadge("☁️ Pendiente de sync", "warn");
+    }
+  }
   await refreshHomeKPIs();
 
   if (andNew){
@@ -470,7 +573,17 @@ $("#dashBack").addEventListener("click", () => setView("home"));
 $("#manualBack").addEventListener("click", () => setView("home"));
 
 async function openDashboard(){
-  const all = await dbGetAll();
+  let all = await dbGetAll();
+  // Prefer cloud records when available
+  if (CLOUD.enabled){
+    try{
+      setCloudBadge("☁️ Cargando nube…", "warn");
+      all = await cloudListRecords({ limit: 2000 });
+      setCloudBadge("☁️ Nube OK", "ok");
+    }catch(e){
+      setCloudBadge("☁️ Nube falló, usando local", "warn");
+    }
+  }
 
   // Build filter option lists (from data + records)
   const plants = Array.from(new Set(all.map(r => r.audited?.plant).filter(Boolean))).sort();
@@ -803,9 +916,188 @@ boot();
 
 
 // --- Securito (offline playbook) ---
+
 let securitoPlaybook = null;
 
-async function loadSecuritoPlaybook(){
+// --- Securito IA (BYOK) ---
+// Nota: La llave se guarda SOLO en este dispositivo (localStorage). IA obligatoria: sin llave no hay respuestas.
+const SEC_AI_STORE = "securito_ai_settings_v1";
+let secAi = { enabled:false, key:"", model:"gpt-4.1-mini" };
+
+function secAiLoad(){
+  try{
+    const raw = localStorage.getItem(SEC_AI_STORE);
+    if (raw){
+      const obj = JSON.parse(raw);
+      secAi = {
+        enabled: !!obj.enabled,
+        key: String(obj.key||""),
+        model: String(obj.model||"gpt-4.1-mini")
+      };
+    }
+  }catch(e){}
+  secAiUpdatePill();
+}
+function secAiSave(next){
+  secAi = {...secAi, ...next};
+  try{ localStorage.setItem(SEC_AI_STORE, JSON.stringify(secAi)); }catch(e){}
+  secAiUpdatePill();
+}
+function secAiUpdatePill(){
+  const pill = document.getElementById("secAiPill");
+  if (!pill) return;
+  if (secAi.enabled && secAi.key){
+    pill.textContent = `IA ON • ${secAi.model}`;
+    pill.style.borderColor = "rgba(34,197,94,.45)";
+    pill.style.background = "rgba(34,197,94,.10)";
+  } else {
+    pill.textContent = "IA requerida";
+    pill.style.borderColor = "";
+    pill.style.background = "";
+  }
+
+}
+
+function secAiModal(show){
+  const m = document.getElementById("secAiModal");
+  if (!m) return;
+  if (show){
+    m.classList.add("show");
+    m.setAttribute("aria-hidden","false");
+    // hydrate fields
+    const en = document.getElementById("secAiEnabled");
+    const k = document.getElementById("secAiKey");
+    const model = document.getElementById("secAiModel");
+    const st = document.getElementById("secAiStatus");
+    if (en) en.checked = !!secAi.enabled;
+    if (k) k.value = secAi.key || "";
+    if (model) model.value = secAi.model || "gpt-4.1-mini";
+    if (st) st.textContent = "—";
+  } else {
+    m.classList.remove("show");
+    m.setAttribute("aria-hidden","true");
+  }
+}
+
+function secAiInitUI(){
+  // Open modal
+  document.addEventListener("click", (e)=>{
+    const t = e.target;
+    if (!t) return;
+
+    if (t.id === "secAiSettingsBtn"){
+      secAiLoad();
+      secAiModal(true);
+    }
+    if (t.id === "secAiClose"){
+      secAiModal(false);
+    }
+    if (t.id === "secAiModal"){
+      secAiModal(false);
+    }
+    if (t.id === "secAiSave"){
+      const en = document.getElementById("secAiEnabled");
+      const k = document.getElementById("secAiKey");
+      const model = document.getElementById("secAiModel");
+      secAiSave({
+        enabled: !!en?.checked,
+        key: String(k?.value||"").trim(),
+        model: String(model?.value||"gpt-4.1-mini")
+      });
+      const st = document.getElementById("secAiStatus");
+      if (st) st.textContent = secAi.enabled ? "Guardado ✅ IA activa." : "Guardado ✅ IA desactivada.";
+      setTimeout(()=>secAiModal(false), 450);
+    }
+    if (t.id === "secAiTest"){
+      secAiLoad();
+      const st = document.getElementById("secAiStatus");
+      if (st) st.textContent = "Probando…";
+      const en = document.getElementById("secAiEnabled");
+      const k = document.getElementById("secAiKey");
+      const model = document.getElementById("secAiModel");
+      const temp = {
+        enabled: !!en?.checked,
+        key: String(k?.value||"").trim(),
+        model: String(model?.value||"gpt-4.1-mini")
+      };
+      // Test cloud endpoint (no CORS, IA server-side)
+      (async ()=>{
+        try{
+          const ok = await cloudHealth();
+          if (!ok) throw new Error("Nube no disponible");
+          // Quick ping to AI
+          const out = await callSecuritoAI({ question: "Responde solo 'OK'", user: state.user || {} });
+          if (st) st.textContent = (out && out.toUpperCase().includes("OK")) ? "Conexión OK ✅" : "Conectó, pero respuesta inesperada.";
+        }catch(err){
+          if (st) st.textContent = "Falló ❌ Revisa deploy (Netlify Functions) y variables de entorno.";
+        }
+      })();
+    }
+  });
+
+  // ESC closes
+  document.addEventListener("keydown", (e)=>{
+    if (e.key === "Escape") secAiModal(false);
+  });
+}
+
+secAiInitUI();
+
+async function callSecuritoAI({question, user}){
+  const r = await fetch("/.netlify/functions/chat", {
+    method: "POST",
+    headers: { "content-type":"application/json" },
+    body: JSON.stringify({ question, user })
+  });
+  const j = await r.json().catch(()=>({}));
+  if (!r.ok || !j.ok) throw new Error(j?.error || `chat ${r.status}`);
+  return (j.answer || "").toString().trim();
+}
+
+function aiPromptFromContext(question, records){
+  const ctx = topContextFromRecords(records);
+  // no metemos datos sensibles: solo conteos y hallazgos
+  const contextBlock = ctx.text;
+
+  const system = [
+    "Eres Securito, un asistente de seguridad industrial para una planta automotriz (línea de ensamble).",
+    "Responde en español claro (MX), directo, con tono profesional y motivador.",
+    "Entrega SIEMPRE en este formato:",
+    "1) Diagnóstico rápido (1-2 líneas)",
+    "2) Campaña (objetivo SMART + duración)",
+    "3) Acciones inmediatas (máx 5 bullets)",
+    "4) Contramedidas (raíz / estandarización / poka-yoke) (máx 5 bullets)",
+    "5) Cómo medir (KPIs simples) (2-3 bullets)",
+    "No inventes datos; si falta info, pide 1 pregunta puntual al final.",
+  ].join("\n");
+
+  const user = [
+    `Pregunta/solicitud: ${question}`,
+    "",
+    "Contexto (hallazgos más frecuentes):",
+    contextBlock
+  ].join("\n");
+
+  return {system, user};
+}
+
+async function securitoAnswerSmart(question, records){
+  // Sin modo offline: IA obligatoria.
+  secAiLoad();
+  try{
+    if (!secAi.enabled){
+      return "IA está desactivada. Abre **IA (⚙️)** y habilita 'Usar IA para respuestas'.";
+    }
+    const ai = await callSecuritoAI({ question, user: state.user });
+    return ai || "No recibí respuesta de IA. Intenta de nuevo.";
+  }catch(e){
+    console.warn("Securito IA falló:", e?.message || e);
+    return "IA no disponible en este momento (servidor/modelo). Abre **IA (⚙️)** y prueba conexión. Si falla, revisa el deploy y variables de entorno.";
+  }
+}
+
+async function loadSecuritoPlaybook
+(){
   if (securitoPlaybook) return securitoPlaybook;
   try{
     const r = await fetch("./data/securito_playbook.json");
@@ -816,17 +1108,71 @@ async function loadSecuritoPlaybook(){
   return securitoPlaybook;
 }
 
+function _parseDate(x){
+  if (!x) return null;
+  if (x instanceof Date) return x;
+  const d = new Date(x);
+  return isNaN(d.getTime()) ? null : d;
+}
+function _withinLastDays(d, days){
+  const now = Date.now();
+  const ms = days*24*3600*1000;
+  return d && (now - d.getTime()) <= ms;
+}
+function _countTop(records, pick){
+  const mm = {};
+  for (const r of (records||[])){
+    const k = pick(r);
+    if (!k) continue;
+    mm[k] = (mm[k]||0)+1;
+  }
+  return Object.entries(mm).sort((a,b)=>b[1]-a[1]).slice(0,3);
+}
+function _fmtTop(arr){
+  return arr.length ? arr.map(([k,v])=>`• ${k}: ${v}`).join("
+") : "—";
+}
+
+/**
+ * Contexto Top por rango:
+ * - 24h: últimas 24h
+ * - 7d: últimos 7 días
+ * - histórico: todo
+ */
 function topContextFromRecords(records){
-  const acts = {};
-  const conds = {};
-  records.forEach(r=>{
-    if (r.acto) acts[r.acto] = (acts[r.acto]||0)+1;
-    if (r.condicion) conds[r.condicion] = (conds[r.condicion]||0)+1;
-  });
-  const topA = Object.entries(acts).sort((a,b)=>b[1]-a[1]).slice(0,3);
-  const topC = Object.entries(conds).sort((a,b)=>b[1]-a[1]).slice(0,3);
-  const fmt = (arr)=> arr.length ? arr.map(([k,v])=>`• ${k}: ${v}`).join("\n") : "—";
-  return { topA, topC, text: `Top Actos:\n${fmt(topA)}\n\nTop Condiciones:\n${fmt(topC)}` };
+  const all = records || [];
+  const dayRecords = all.filter(r => _withinLastDays(_parseDate(r.createdAt), 1));
+  const weekRecords = all.filter(r => _withinLastDays(_parseDate(r.createdAt), 7));
+
+  const pickActo = (r)=> (r?.findings?.acto || r?.acto_inseguro || "");
+  const pickCond = (r)=> (r?.findings?.condicion || r?.condicion_insegura || "");
+
+  const ctxAll = { topA: _countTop(all, pickActo), topC: _countTop(all, pickCond) };
+  const ctxDay = { topA: _countTop(dayRecords, pickActo), topC: _countTop(dayRecords, pickCond) };
+  const ctxWeek= { topA: _countTop(weekRecords, pickActo), topC: _countTop(weekRecords, pickCond) };
+
+  const text = [
+    "Top (últimas 24h):",
+    `Actos:
+${_fmtTop(ctxDay.topA)}`,
+    `Condiciones:
+${_fmtTop(ctxDay.topC)}`,
+    "",
+    "Top (últimos 7 días):",
+    `Actos:
+${_fmtTop(ctxWeek.topA)}`,
+    `Condiciones:
+${_fmtTop(ctxWeek.topC)}`,
+    "",
+    "Top (histórico):",
+    `Actos:
+${_fmtTop(ctxAll.topA)}`,
+    `Condiciones:
+${_fmtTop(ctxAll.topC)}`
+  ].join("
+");
+
+  return { day: ctxDay, week: ctxWeek, all: ctxAll, text };
 }
 
 function secLog(who, txt){
@@ -862,14 +1208,38 @@ async function securitoAnswer(question, records){
 }
 
 async function openSecurito(){
+  secAiLoad();
   __secFreeMode = true;
   __secActiveUntil = Date.now() + 3600*1000; // keep window alive while inside view
 
   setView("securito");
-  const all = await dbGetAll();
-  const ctx = topContextFromRecords(all);
   const box = document.getElementById("secTopContext");
-  if (box) box.textContent = ctx.text;
+  // Prefer cloud top (real DB). If not available, fallback to local counts.
+  try{
+    if (CLOUD.enabled){
+      const day = await fetch("/.netlify/functions/top?range=day").then(r=>r.json());
+      const week = await fetch("/.netlify/functions/top?range=week").then(r=>r.json());
+      const fmt = (arr)=> (arr?.length? arr.slice(0,3).map(x=>`• ${x.label}: ${x.count}`).join("\n") : "—");
+      const text = [
+        "Top (últimas 24h):",
+        `Actos:\n${fmt(day.actos)}`,
+        `Condiciones:\n${fmt(day.condiciones)}`,
+        "",
+        "Top (últimos 7 días):",
+        `Actos:\n${fmt(week.actos)}`,
+        `Condiciones:\n${fmt(week.condiciones)}`
+      ].join("\n");
+      if (box) box.textContent = text;
+    }else{
+      const all = await dbGetAll();
+      const ctx = topContextFromRecords(all);
+      if (box) box.textContent = ctx.text;
+    }
+  }catch(e){
+    const all = await dbGetAll();
+    const ctx = topContextFromRecords(all);
+    if (box) box.textContent = ctx.text;
+  }
   const log = document.getElementById("secLog");
   if (log && !log.dataset.init){
     log.dataset.init = "1";
@@ -915,9 +1285,29 @@ function speak(text, anime=true){
   try{
     if (!("speechSynthesis" in window)) return;
     const u = new SpeechSynthesisUtterance(text);
-    u.onstart = ()=>toggleSecuritoTalking(true);
-    u.onend = ()=>toggleSecuritoTalking(false);
-    u.onerror = ()=>toggleSecuritoTalking(false);
+    u.onstart = ()=>{
+      __secIsSpeaking = true;
+      __secLastSpoken = String(text||"");
+      // Stop ASR while TTS is playing to avoid echo-loops.
+      try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
+      __secAsrRunning = false;
+      toggleSecuritoTalking(true);
+    };
+    u.onend = ()=>{
+      toggleSecuritoTalking(false);
+      __secIsSpeaking = false;
+      // Resume auto-listen only after speech ends.
+      if (typeof __secAutoListen !== "undefined" && __secAutoListen){
+        try{
+          if (typeof startListening === "function"){
+            // restart with a cooldown
+            if (typeof __secAsrRestartT !== "undefined" && __secAsrRestartT) clearTimeout(__secAsrRestartT);
+            __secAsrRestartT = setTimeout(()=>{ try{ startListening(window.__secOnTextCB||null); }catch(e){} }, 600);
+          }
+        }catch(e){}
+      }
+    };
+    u.onerror = ()=>{ toggleSecuritoTalking(false); __secIsSpeaking = false; };
     u.lang = "es-MX";
     u.rate = anime ? 1.08 : 1.0;
     u.pitch = anime ? 1.2 : 1.0;
@@ -1080,7 +1470,7 @@ async function sendToSecurito(q, opts={}){
   try{ setSecuritoState("thinking"); }catch(e){}
 
   const all = await dbGetAll();
-  const ans = await securitoAnswer(cleaned, all);
+  const ans = await securitoAnswerSmart(cleaned, all);
 
   secLog("Securito", ans);
 
@@ -1154,6 +1544,10 @@ window.__secRec = window.__secRec || null;
 window.__secRec = window.__secRec || null;
 let __secAutoListen = false;
 let __secAsrRunning = false;
+let __secIsSpeaking = false;
+let __secLastSpoken = "";
+let __secLastHeard = "";
+let __secLastHeardAt = 0;
 let __secAsrRestartT = null;
 let __secAsrDebounceT = null;
 let __secAsrLastText = "";
@@ -1205,6 +1599,7 @@ function __secHandleAsrText(text, isFinal){
 }
 
 function startListening(onText){
+  window.__secOnTextCB = onText;
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return false;
 
@@ -1221,8 +1616,8 @@ function startListening(onText){
     window.__secRec = r;
 
     r.lang = "es-MX";              // force Spanish (Mexico)
-    r.interimResults = true;
-    r.continuous = true;           // keep session open to avoid UI flicker
+    r.interimResults = false;
+    r.continuous = false;          // single-shot to avoid loops/echo
     r.maxAlternatives = 3;
 
     __secAsrRunning = true;
@@ -1237,15 +1632,25 @@ function startListening(onText){
         if (res.isFinal) finalText += (finalText ? " " : "") + txt;
         else interim += (interim ? " " : "") + txt;
       }
-      const combined = (finalText || interim).trim();
-      if (combined && onText) onText(combined, !!finalText);
+      const combined = (finalText).trim();
+      if (!combined) return;
+      // Debounce + echo guard: ignore repeats and anything too similar to what we just spoke.
+      const now = Date.now();
+      const norm = (s)=>String(s||"").toLowerCase().replace(/[^a-záéíóúüñ0-9 ]/gi,"").replace(/\s+/g," ").trim();
+      const heardN = norm(combined);
+      const spokenN = norm(__secLastSpoken);
+      if (__secIsSpeaking) return;
+      if (heardN && spokenN && (heardN === spokenN || heardN.includes(spokenN) || spokenN.includes(heardN))) return;
+      if (heardN && __secLastHeard === heardN && (now - __secLastHeardAt) < 2000) return;
+      __secLastHeard = heardN; __secLastHeardAt = now;
+      if (onText) onText(combined, true);
     };
 
     r.onerror = ()=>{
       __secAsrRunning = false;
       secSetListening(false);
       // Auto-restart only if auto-listen is enabled
-      if (__secAutoListen){
+      if (__secAutoListen && !__secIsSpeaking){
         if (__secAsrRestartT) clearTimeout(__secAsrRestartT);
         __secAsrRestartT = setTimeout(()=> startListening(onText), 700);
       } else {
@@ -1256,7 +1661,7 @@ function startListening(onText){
     r.onend = ()=>{
       __secAsrRunning = false;
       // If auto listen is enabled, restart with a small cooldown to avoid rapid loops
-      if (__secAutoListen){
+      if (__secAutoListen && !__secIsSpeaking){
         secSetListening(true); // keep UI steady
         if (__secAsrRestartT) clearTimeout(__secAsrRestartT);
         __secAsrRestartT = setTimeout(()=> startListening(onText), 450);
@@ -1339,7 +1744,7 @@ function secCreateSpeechRec(){
   if (!SR) return null;
   const r = new SR();
   r.lang = "es-MX";
-  r.interimResults = true;
+  r.interimResults = false;
   r.continuous = false;
   return r;
 }
@@ -1499,7 +1904,7 @@ function escapeHtml(str){
       const r = new SR();
       window.__secRec = r;
       r.lang = "es-MX";
-      r.interimResults = true;
+      r.interimResults = false;
       r.continuous = false;
       let finalText = "";
       r.onresult = (ev)=>{
