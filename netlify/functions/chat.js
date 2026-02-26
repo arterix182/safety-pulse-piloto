@@ -1,6 +1,21 @@
 import { json, requireEnv, supa } from "./_shared.js";
 
+
+function isSafetyTopic(txt){
+  const t = String(txt||"").toLowerCase();
+  const kws = [
+    "seguridad","safety","acto","condición","condicion","riesgo","peligro","ppe","epp",
+    "casco","lentes","guantes","chaleco","arnés","arnes","lockout","loto","montacargas",
+    "forklift","peatonal","zona","derrame","resbal","caída","caida",
+    "incidente","lesión","lesion","near miss","casi accidente","5s","ergonom","postura",
+    "extintor","evacu","fuego","químic","quimic","quimico","eléctr","electric",
+    "guardas","protección","proteccion","barandal","andamio","escalera","altura"
+  ];
+  return kws.some(k=>t.includes(k));
+}
+
 async function openaiChat(messages, tools){
+
   const key = requireEnv("OPENAI_API_KEY");
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -11,6 +26,7 @@ async function openaiChat(messages, tools){
     body: JSON.stringify({
       model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
       temperature: 0.2,
+      max_tokens: 260,
       messages,
       tools,
       tool_choice: tools?.length ? "auto" : undefined
@@ -74,6 +90,12 @@ export async function handler(event){
 
     const body = JSON.parse(event.body || "{}");
     const question = (body?.question || "").toString().trim();
+
+    if (!question) return json(400, { ok:false, error:"Pregunta vacía" });
+    if (!isSafetyTopic(question)){
+      return json(200, { ok:true, answer:"Soy Securito y mi función es apoyar con seguridad. Si tienes una situación de seguridad, cuéntame y te ayudo." });
+    }
+
     const user = body?.user || {};
     if (!question) return json(400, { ok:false, error:"Missing question" });
 
@@ -114,9 +136,12 @@ export async function handler(event){
       }
     ];
 
-    const system = `Eres Securito, un asistente de seguridad industrial para planta automotriz.\n`+
-      `Reglas: responde en español claro, directo y accionable.\n`+
+    const system = `Eres Securito, un asistente de SEGURIDAD industrial (EHS) para una planta automotriz.\n`+
+      `Alcance: solo seguridad (actos/condiciones inseguras, PPE/EPP, riesgos, incidentes, ergonomía, 5S, LOTO, prevención).\n`+
+      `Si la pregunta NO es de seguridad, responde amable y breve: "Soy Securito y mi función es apoyar con seguridad. Si tienes una situación de seguridad, cuéntame y te ayudo." y NO inventes información.\n`+
+      `Responde en español claro, directo y accionable (2–5 frases).\n`+
       `Si te piden TOP del día/semana, debes usar get_top y basarte solo en datos reales.`;
+
 
     const messages = [
       { role: "system", content: system },

@@ -45,7 +45,7 @@ body{
 .brandName{font-weight:800; letter-spacing:.3px}
 .brandSub{font-size:12px; color:var(--muted)}
 .topActions{display:flex; gap:8px}
-.main{flex:1; padding:14px; padding-bottom:86px}
+.main{flex:1; padding:14px; padding-bottom: calc(96px + env(safe-area-inset-bottom));}
 .view{display:none}
 .view.active{display:block}
 .center{max-width:520px; margin: 48px auto; text-align:center}

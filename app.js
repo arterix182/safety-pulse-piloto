@@ -430,7 +430,7 @@ $$(".tile").forEach(btn => btn.addEventListener("click", () => {
   const go = btn.getAttribute("data-go");
   nav(go);
 }));
-$("#quickRecord").addEventListener("click", () => nav("recorrido"));
+const __qr=$("#quickRecord"); if(__qr) __qr.addEventListener("click", () => nav("recorrido"));
 
 // bottom nav
 $$(".navbtn").forEach(btn => btn.addEventListener("click", () => {
@@ -1107,14 +1107,35 @@ function secAiUpdatePill(){
 }
 
 async function callSecuritoAI({question, user}){
-  const r = await fetch("/.netlify/functions/chat", {
-    method: "POST",
-    headers: { "content-type":"application/json" },
-    body: JSON.stringify({ question, user })
-  });
+  const payload = JSON.stringify({ question, user });
+
+  const doFetch = async (timeoutMs)=>{
+    const ac = new AbortController();
+    const to = setTimeout(()=>ac.abort(), timeoutMs);
+    try{
+      return await fetch("/.netlify/functions/chat", {
+        method: "POST",
+        headers: { "content-type":"application/json" },
+        body: payload,
+        cache:"no-store",
+        signal: ac.signal
+      });
+    } finally {
+      clearTimeout(to);
+    }
+  };
+
+  let r;
+  try{
+    r = await doFetch(12000);
+  }catch(e){
+    // Retry once with longer timeout (mobile networks)
+    r = await doFetch(20000);
+  }
+
   const j = await r.json().catch(()=>({}));
   if (!r.ok || !j.ok) throw new Error(j?.error || `chat ${r.status}`);
-  return (j.answer || "").toString().trim();
+  return (j.answer || j.ans || "").trim();
 }
 
 function aiPromptFromContext(question, records){
@@ -1142,6 +1163,19 @@ function aiPromptFromContext(question, records){
   ].join("\n");
 
   return {system, user};
+}
+
+function isSafetyTopic(txt){
+  const t = String(txt||"").toLowerCase();
+  const kws = [
+    "seguridad","safety","acto","condición","condicion","riesgo","peligro","ppe","epp",
+    "casco","lentes","guantes","chaleco","arnés","arnes","lockout","loto","montacargas",
+    "forklift","peatonal","zona","derrame","resbal","caída","caida",
+    "incidente","lesión","lesion","near miss","casi accidente","5s","ergonom","postura",
+    "extintor","evacu","fuego","químic","quimic","quimico","eléctr","electric",
+    "guardas","protección","proteccion","barandal","andamio","escalera","altura"
+  ];
+  return kws.some(k=>t.includes(k));
 }
 
 async function securitoAnswerSmart(question, records){
@@ -1927,6 +1961,23 @@ function secCreateSpeechRec(){
 }
 
 window.addEventListener("DOMContentLoaded", ()=>{
+  // ✅ Mobile audio unlock: on first user tap anywhere, pre-unlock audio playback (no extra UI).
+  const __unlockOnce = async ()=>{
+    try{
+      const a = ensureSecAudioEl();
+      a.muted = true;
+      a.src = "data:audio/mp3;base64,//uQZAAAAAAAAAAAAAAAAAAAA"; // tiny silent header
+      await a.play().catch(()=>{});
+      a.pause();
+      a.currentTime = 0;
+      a.muted = false;
+    }catch(e){}
+  };
+  document.addEventListener("pointerdown", __unlockOnce, { once:true, passive:true });
+  // ✅ Prewarm functions to reduce first-response latency on mobile networks.
+  fetch("/.netlify/functions/health", { cache:"no-store" }).catch(()=>{});
+
+
   const talk = document.getElementById("secTalk");
   const stop = document.getElementById("secStop");
   const input = document.getElementById("secInput");
@@ -2218,4 +2269,3 @@ function startSecuritoBlink(){
 function stopSecuritoBlink(){
   if (__secBlinkTimer){ clearTimeout(__secBlinkTimer); __secBlinkTimer = null; }
 }
-
