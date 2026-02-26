@@ -103,16 +103,6 @@ export async function handler(event){
     const question = (body?.question || "").toString().trim();
 
     if (!question) return json(400, { ok:false, error:"Pregunta vacía" });
-    if (!isSafetyTopic(question)){
-      const meta = body?.meta || {};
-      const uname = (user?.name || "").toString().trim();
-      const first = uname ? uname.split(/\s+/).slice(0,2).join(" ") : "";
-      const who = first || "amigo";
-
-      // Greetings and small talk are allowed (we keep the scope but we don't act rude)
-      if (isGreeting(question)){
-        return json(200, { ok:true, answer:`¡Hola, ${who}! 👋 Soy Securito.\n\nCuéntame tu **situación de seguridad** (¿qué viste y en dónde?) y te doy acciones concretas.` });
-      }
       if (isMetaAboutSecurito(question)){
         return json(200, { ok:true, answer:`Hablo así para ser **claro y accionable** en seguridad. 😄\n\nDime qué hallazgo tienes (EPP/acto/condición/zona) y te digo qué hacer.` });
       }
@@ -190,9 +180,7 @@ const user = body?.user || {};
       }
     ];
 
-    const system = `Eres Securito, un asistente de SEGURIDAD industrial (EHS) para una planta automotriz.\n`+
-      `Alcance: solo seguridad (actos/condiciones inseguras, PPE/EPP, riesgos, incidentes, ergonomía, 5S, LOTO, prevención).\n`+
-      `Si la pregunta NO es de seguridad, responde amable y breve: "Soy Securito y mi función es apoyar con seguridad. Si tienes una situación de seguridad, cuéntame y te ayudo." y NO inventes información.\n`+
+    const system = `Eres Securito, un asistente virtual amable y rápido para una planta automotriz. Tu especialidad es seguridad industrial (EHS), pero puedes ayudar con cualquier tema. Cuando sea posible, sugiere buenas prácticas de seguridad.\n`+
       `Responde en español (MX) claro y humano, con tono amable y pro. Sé breve (2–5 frases), y usa el nombre del usuario si se conoce.\n`+
       `Si te piden TOP del día/semana, debes usar get_top y basarte solo en datos reales.`;
 

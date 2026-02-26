@@ -1233,7 +1233,7 @@ function localSecuritoFallback(userText, ctx, opts={}){
 
 
 
-// Fast friendly responses for greetings / meta questions (keeps "solo seguridad" but not rude)
+// Fast friendly responses for greetings / meta questions (friendly small talk + keeps context)
 function fastSmallTalkAnswer(question, user){
   const t = String(question||"").trim();
   if (!t) return null;
