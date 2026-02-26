@@ -1,48 +1,20 @@
-// netlify/functions/gmin-lookup.js (CommonJS)
-// Looks up GMID/GMIn directory record from Supabase.
-// Requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. Table expected: gmin_directory
-// Query: ?gmin=530447361
-function json(statusCode, obj) {
-  return {
-    statusCode,
-    headers: {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "no-store",
-    },
-    body: JSON.stringify(obj),
-  };
-}
+const { ok, bad, sbFetch, isOptions } = require('./_shared');
 
+// GET /.netlify/functions/gmin-lookup?gmin=530447361
 exports.handler = async (event) => {
+  if (isOptions(event)) return ok({ ok: true });
   try {
-    const gmin = (event.queryStringParameters?.gmin || "").trim();
-    if (!gmin) return json(400, { ok: false, error: "missing_gmin" });
+    const gmin = (event.queryStringParameters?.gmin || '').trim();
+    if (!gmin) return bad(400, 'Missing gmin');
 
-    const url = process.env.SUPABASE_URL;
-    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
-    if (!url || !key) {
-      return json(501, { ok: false, error: "supabase_not_configured" });
-    }
-
-    // REST query
-    const endpoint = `${url}/rest/v1/gmin_directory?gmin=eq.${encodeURIComponent(gmin)}&select=gmin,manager,area,turno,linea,tripulacion,planta,antiguedad`;
-    const r = await fetch(endpoint, {
-      headers: {
-        "apikey": key,
-        "Authorization": `Bearer ${key}`,
-        "Accept": "application/json",
-      },
+    // Table: gmin_directory (columns: gmin, manager, area, turno, linea, tripulacion, antiguedad?)
+    const rows = await sbFetch('gmin_directory', {
+      query: `select=*&gmin=eq.${encodeURIComponent(gmin)}&limit=1`,
     });
 
-    const data = await r.json().catch(() => null);
-    if (!r.ok) return json(r.status, { ok: false, error: "supabase_error", detail: data });
-
-    const rec = Array.isArray(data) ? data[0] : null;
-    if (!rec) return json(404, { ok: false, error: "not_found" });
-
-    return json(200, { ok: true, record: rec });
-  } catch (err) {
-    return json(500, { ok: false, error: "lookup_failed", detail: String(err?.message || err) });
+    const row = Array.isArray(rows) ? rows[0] : null;
+    return ok({ ok: true, data: row || null });
+  } catch (e) {
+    return bad(e.status || 500, e.message || 'Server error', { details: e.data });
   }
 };

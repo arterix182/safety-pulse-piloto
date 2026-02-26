@@ -1,85 +1,54 @@
-// netlify/functions/tts.js (CommonJS)
-// OpenAI TTS via fetch. Returns audio/mpeg as base64.
-// Request body: { text: "...", voice?: "...", format?: "mp3"|"wav"|"opus" }
-function res(statusCode, headers, body, isBase64Encoded=false) {
-  return { statusCode, headers, body, isBase64Encoded };
-}
-function json(statusCode, obj) {
-  return res(statusCode, {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Cache-Control": "no-store",
-  }, JSON.stringify(obj));
-}
+const { ok, bad, isOptions, readJson } = require('./_shared');
 
+// POST { text, voice?, format? }
 exports.handler = async (event) => {
+  if (isOptions(event)) return ok({ ok: true });
+  if (event.httpMethod !== 'POST') return bad(405, 'Method not allowed');
+
   try {
-    if (event.httpMethod === "OPTIONS") return json(200, { ok: true });
-    if (event.httpMethod !== "POST") return json(405, { ok: false, error: "Method not allowed" });
+    const body = readJson(event) || {};
+    const text = String(body.text || '').trim();
+    if (!text) return bad(400, 'Missing text');
 
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) return json(500, { ok: false, error: "OPENAI_API_KEY missing" });
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) return bad(503, 'IA not configured (missing OPENAI_API_KEY)');
 
-    let body = {};
-    try { body = JSON.parse(event.body || "{}"); } catch { body = {}; }
+    // Voice: OpenAI voices are limited; “anime” style is a prompt-level vibe.
+    const voice = body.voice || 'alloy';
+    const format = body.format || 'mp3';
 
-    const text = String(body.text || body.message || "").trim();
-    if (!text) return json(400, { ok: false, error: "missing_text" });
-
-    const model = String(body.model || process.env.OPENAI_TTS_MODEL || "gpt-4o-mini-tts");
-    const voice = String(body.voice || process.env.OPENAI_TTS_VOICE || "alloy"); // change to your preferred
-    const format = String(body.format || process.env.OPENAI_TTS_FORMAT || "mp3"); // mp3 by default
-
-    const payload = {
-      model,
-      voice,
-      input: text.slice(0, 3000),
-      format,
-    };
-
-    const controller = new AbortController();
-    const timeoutMs = Number(process.env.OPENAI_TTS_TIMEOUT_MS || 25000);
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-
-    const r = await fetch("https://api.openai.com/v1/audio/speech", {
-      method: "POST",
+    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
+        'content-type': 'application/json',
+        'authorization': `Bearer ${key}`,
       },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(t));
+      body: JSON.stringify({
+        model: 'gpt-4o-mini-tts',
+        voice,
+        format,
+        // Put “anime vibe” in instruction — depends on model capabilities.
+        input: text,
+      }),
+    });
 
-    if (!r.ok) {
-      const txt = await r.text().catch(() => "");
-      let data = {};
-      try { data = JSON.parse(txt); } catch { data = { raw: txt }; }
-      return json(r.status, {
-        ok: false,
-        error: "openai_tts_error",
-        status: r.status,
-        detail: data?.error?.message || data?.message || "TTS failed",
-      });
+    if (!res.ok) {
+      const err = await res.text();
+      return bad(res.status, `TTS error`, { details: err });
     }
 
-    const arrayBuf = await r.arrayBuffer();
-    const b64 = Buffer.from(arrayBuf).toString("base64");
-
-    // Return audio as base64. Client should create Blob/Audio from it.
-    const mime = format === "wav" ? "audio/wav"
-      : format === "opus" ? "audio/opus"
-      : "audio/mpeg";
-
-    return res(200, {
-      "Content-Type": "application/json; charset=utf-8",
-      "Access-Control-Allow-Origin": "*",
-      "Cache-Control": "no-store",
-    }, JSON.stringify({ ok: true, mime, audio_b64: b64 }), false);
-  } catch (err) {
-    const msg = String(err?.name === "AbortError" ? "timeout" : (err?.message || err));
-    return json(500, { ok: false, error: "tts_failed", detail: msg });
+    const audio = Buffer.from(await res.arrayBuffer());
+    return {
+      statusCode: 200,
+      headers: {
+        'content-type': format === 'wav' ? 'audio/wav' : 'audio/mpeg',
+        'cache-control': 'no-store',
+        'access-control-allow-origin': '*',
+      },
+      body: audio.toString('base64'),
+      isBase64Encoded: true,
+    };
+  } catch (e) {
+    return bad(500, e.message || 'Server error');
   }
 };
