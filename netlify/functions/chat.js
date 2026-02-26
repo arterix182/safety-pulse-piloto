@@ -1,7 +1,4 @@
-import { json, requireEnv, supa } from "./_shared.js";
-
-
-
+const { json, requireEnv, supa } = require("./_shared.js");
 function isGreeting(txt){
   const t = String(txt||"").trim().toLowerCase();
   return /^(hola|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|que\s+tal|hey|saludos)(\b|!|\.|,|$)/i.test(t);
@@ -94,7 +91,7 @@ async function getRecent(limit=20){
   return data || [];
 }
 
-export async function handler(event){
+exports.handler = async (event) => {
   try{
     if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: {"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type"}, body: "" };
     if (event.httpMethod !== "POST") return json(405, { ok:false, error:"Method not allowed" });

@@ -1,6 +1,5 @@
-import { cors, json, supa, pickQueryParam } from "./_shared.js";
-
-export async function handler(event){
+const { cors, json, supa, pickQueryParam } = require("./_shared.js");
+exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: cors(), body: "" };
   if (event.httpMethod !== "GET") return json(405, { ok:false, error:"Use GET" });
 

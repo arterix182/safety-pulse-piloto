@@ -1,6 +1,5 @@
-import { json, supa, pickQueryParam } from "./_shared.js";
-
-export async function handler(event){
+const { json, supa, pickQueryParam } = require("./_shared.js");
+exports.handler = async (event) => {
   try{
     if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: {"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type"}, body: "" };
     if (event.httpMethod !== "GET") return json(405, { ok:false, error:"Method not allowed" });

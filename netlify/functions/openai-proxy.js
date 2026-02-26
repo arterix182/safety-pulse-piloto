@@ -2,7 +2,7 @@
 // - Same-origin endpoint to avoid browser CORS issues
 // - Supports BYOK: client sends Authorization: Bearer <key>
 
-export async function handler(event) {
+exports.handler = async (event) => {
   // CORS preflight
   if (event.httpMethod === "OPTIONS") {
     return {

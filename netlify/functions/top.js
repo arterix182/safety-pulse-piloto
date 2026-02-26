@@ -1,5 +1,4 @@
-import { json, supa, pickQueryParam } from "./_shared.js";
-
+const { json, supa, pickQueryParam } = require("./_shared.js");
 function groupCount(rows, key){
   const m = new Map();
   for (const r of rows){
@@ -10,7 +9,7 @@ function groupCount(rows, key){
   return Array.from(m.entries()).sort((a,b)=>b[1]-a[1]).map(([label,count])=>({label,count}));
 }
 
-export async function handler(event){
+exports.handler = async (event) => {
   try{
     if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: {"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type"}, body: "" };
     if (event.httpMethod !== "GET") return json(405, { ok:false, error:"Method not allowed" });

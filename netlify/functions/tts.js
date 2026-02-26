@@ -1,6 +1,5 @@
-import { cors, json, requireEnv } from "./_shared.js";
-
-export async function handler(event){
+const { cors, json, requireEnv } = require("./_shared.js");
+exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: cors(), body: "" };
   if (event.httpMethod !== "POST") return json(405, { ok:false, error:"Use POST" });
 
