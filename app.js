@@ -13,6 +13,7 @@ const VIEWS = {
 
 const state = {
   directory: null,
+  managers: null,
   actos: [],
   condiciones: [],
   user: null,
@@ -224,6 +225,12 @@ async function boot(){
       }catch(e){
       }
 
+  try{
+    state.managers = await loadJSON("./data/managers.json");
+  }catch(e){
+    state.managers = null;
+  }
+
   try{ state.actos = await loadJSON("./data/actos.json"); }catch{ state.actos=[]; }
   try{ state.condiciones = await loadJSON("./data/condiciones.json"); }catch{ state.condiciones=[]; }
 
@@ -254,6 +261,56 @@ function dirLookup(gmin){
   return state.directory?.byGmin?.[g] || null;
 }
 
+// --------------------- Cloud directory (Supabase) lookup
+async function cloudLookupGmin(gmin){
+  const g = safe(gmin).replace(/[^0-9]/g, "");
+  if (!g) return null;
+  try{
+    const r = await fetch(`/.netlify/functions/gmin-lookup?gmin=${encodeURIComponent(g)}`, { cache:"no-store" });
+    const j = await r.json().catch(()=>null);
+    if (!r.ok || !j || !j.found) return null;
+    const p = j.person || null;
+    if (!p) return null;
+    return {
+      gmin: p.gmin,
+      name: p.name,
+      plant: p.plant,
+      org: "",
+      manager: p.manager,
+      shift: p.shift,
+      managerGmin: p.manager_gmin || p.managerGmin || "",
+      hireDate: p.hireDate || p.hire_date || "",
+      lengthOfServiceYears: (typeof p.lengthOfServiceYears === "number" ? p.lengthOfServiceYears : (p.length_of_service_years ?? null)),
+      managerMeta: j.managerMeta || {isManager:false}
+    };
+  }catch(e){
+    return null;
+  }
+}
+
+async function getPerson(gmin){
+  // Prefer cloud directory when enabled; fallback to local directory.json
+  if (CLOUD.enabled){
+    const c = await cloudLookupGmin(gmin);
+    if (c) return c;
+  }
+  const p = dirLookup(gmin);
+  if (!p) return null;
+  const meta = state.managers?.byGmin?.[safe(gmin)] || null;
+  return {
+    gmin: p.gmin,
+    name: p.name,
+    plant: p.plant || "",
+    org: p.org || "",
+    manager: p.manager || "",
+    shift: p.shift || "",
+    managerGmin: p.managerGmin || p.manager_gmin || "",
+    hireDate: p.hireDate || p.hire_date || "",
+    lengthOfServiceYears: (typeof p.lengthOfServiceYears === "number" ? p.lengthOfServiceYears : (p.length_of_service_years ?? null)),
+    managerMeta: meta ? { isManager:true, area: meta.area || "", turno: meta.turno || "" } : { isManager:false }
+  };
+}
+
 // --------------------- Login
 $("#goLogin").addEventListener("click", () => setView("login"));
 $("#backWelcome").addEventListener("click", () => setView("welcome"));
@@ -262,8 +319,8 @@ $("#loginBtn").addEventListener("click", async () => {
   const gmin = safe($("#gminInput").value);
   const msg = $("#loginMsg");
   if (!gmin) return toast(msg, "Ingresa tu GMIN.");
-  const person = dirLookup(gmin);
-  if (!person) return toast(msg, "GMIN no encontrado en el directorio. Verifica o solicita alta.");
+  const person = await getPerson(gmin);
+  if (!person) return toast(msg, "GMIN no encontrado. Verifica o solicita alta.");
   // Save user session
   state.user = {
     gmin: person.gmin,
@@ -272,7 +329,10 @@ $("#loginBtn").addEventListener("click", async () => {
     org: person.org,
     manager: person.manager,
     shift: person.shift,
-    line: ""
+    line: "",
+    area: person?.managerMeta?.area || "",
+    turno: person?.managerMeta?.turno || "",
+    isManager: !!person?.managerMeta?.isManager
   };
 
   // Reglas piloto (personalizadas)
@@ -310,7 +370,9 @@ function renderUserHeader(){
   const meta = [
     u.org ? `Org: ${u.org}` : null,
     u.manager ? `Manager: ${u.manager}` : null,
-    u.shift ? `Shift: ${u.shift}` : null
+    u.shift ? `Shift: ${u.shift}` : null,
+    u.isManager ? `Área: ${u.area || "—"}` : null,
+    u.isManager ? `Turno: ${u.turno || "—"}` : null
   ].filter(Boolean).join(" • ");
   $("#userMeta").textContent = meta || "—";
 }
@@ -445,68 +507,97 @@ function filterList(list, q){
   return list.filter(x => x.toLowerCase().includes(s));
 }
 
-formEls.actoInput.addEventListener("input", () => {
+function showActoCombo(){
   const items = filterList(state.actos, formEls.actoInput.value);
   renderCombo(formEls.actoCombo, items, (pick) => {
     formEls.actoInput.value = pick;
     formEls.actoCombo.classList.remove("show");
   });
-});
-
-formEls.condInput.addEventListener("input", () => {
+}
+function showCondCombo(){
   const items = filterList(state.condiciones, formEls.condInput.value);
   renderCombo(formEls.condCombo, items, (pick) => {
     formEls.condInput.value = pick;
     formEls.condCombo.classList.remove("show");
   });
+}
+
+formEls.actoInput.addEventListener("input", () => {
+  // al escribir, filtra
+  showActoCombo();
 });
 
-// audited lookup
+// al enfocar/click, muestra lista completa (o filtrada si ya hay texto)
+formEls.actoInput.addEventListener("focus", showActoCombo);
+formEls.actoInput.addEventListener("click", showActoCombo);
+
+formEls.condInput.addEventListener("input", () => {
+  showCondCombo();
+});
+
+formEls.condInput.addEventListener("focus", showCondCombo);
+formEls.condInput.addEventListener("click", showCondCombo);
+
+// Cerrar dropdowns al tocar fuera
+document.addEventListener("click", (e)=>{
+  const t = e.target;
+  if (!t) return;
+  const inActo = formEls.actoWrap.contains(t);
+  const inCond = formEls.condWrap.contains(t);
+  if (!inActo) formEls.actoCombo.classList.remove("show");
+  if (!inCond) formEls.condCombo.classList.remove("show");
+});
+
+// audited lookup (cloud-first)
+let __auditedLookupT = null;
 formEls.auditedGmin.addEventListener("input", () => {
-  const g = safe(formEls.auditedGmin.value);
-  const p = g ? dirLookup(g) : null;
-  if (!p){
-    state.audited = null;
-    formEls.auditedName.textContent = g ? "No encontrado" : "—";
-    formEls.auditedPlant.textContent = "—";
-    formEls.auditedLos.textContent = "—";
-    formEls.auditedMgr.textContent = "—";
-    formEls.autoLine.textContent = "—";
-    formEls.autoShift.textContent = "—";
-    return;
-  }
+  if (__auditedLookupT) clearTimeout(__auditedLookupT);
+  __auditedLookupT = setTimeout(async ()=>{
+    const g = safe(formEls.auditedGmin.value);
+    const p = g ? await getPerson(g) : null;
+    if (!p){
+      state.audited = null;
+      formEls.auditedName.textContent = g ? "No encontrado" : "—";
+      formEls.auditedPlant.textContent = "—";
+      formEls.auditedLos.textContent = "—";
+      formEls.auditedMgr.textContent = "—";
+      formEls.autoLine.textContent = "—";
+      formEls.autoShift.textContent = "—";
+      return;
+    }
 
-  // Guardar perfil auditado en estado (para que se vaya al registro)
-  state.audited = {
-    gmin: p.gmin,
-    name: p.name,
-    plant: p.plant || "",
-    org: p.org || "",
-    manager: p.manager || "",
-    shift: p.shift || "",
-    turno: "",
-    linea: ""
-  };
+    state.audited = {
+      gmin: p.gmin,
+      name: p.name,
+      plant: p.plant || "",
+      org: p.org || "",
+      manager: p.manager || "",
+      shift: p.shift || "",
+      turno: "",
+      linea: ""
+    };
 
-  const fallbackLine = (p.org || p.costCenter || "");
-  const tl = deriveTurnoLinea(state.audited.manager, p.shift, fallbackLine);
-  state.audited.turno = tl.turno || p.shift || "";
-  state.audited.linea = tl.linea || "";
+    const fallbackLine = (p.org || "");
+    const tl = deriveTurnoLinea(state.audited.manager, p.shift, fallbackLine);
+    state.audited.turno = tl.turno || p.shift || "";
+    state.audited.linea = tl.linea || "";
 
-  formEls.auditedName.textContent = p.name;
-  formEls.auditedPlant.textContent = p.plant || "—";
-  formEls.auditedLos.textContent = losLabel(p);
-  formEls.auditedMgr.textContent = p.manager || "—";
-  formEls.autoLine.textContent = state.audited.linea || "—";
-  formEls.autoShift.textContent = state.audited.turno || "—";
+    formEls.auditedName.textContent = p.name;
+    formEls.auditedPlant.textContent = p.plant || "—";
+    // Antigüedad (Length of Service / Hire date)
+    formEls.auditedLos.textContent = losLabel(p);
+    formEls.auditedMgr.textContent = p.manager || "—";
+    formEls.autoLine.textContent = state.audited.linea || "—";
+    formEls.autoShift.textContent = state.audited.turno || "—";
+  }, 240);
 });
 
 async function saveRecord(andNew=false){
   const msg = formEls.saveMsg;
   const audited = safe(formEls.auditedGmin.value);
   if (!audited) return toast(msg, "Falta GMIN auditado.");
-  const auditedPerson = dirLookup(audited);
-  if (!auditedPerson) return toast(msg, "GMIN auditado no existe en directorio.");
+  const auditedPerson = state.audited || await getPerson(audited);
+  if (!auditedPerson) return toast(msg, "GMIN auditado no existe.");
   const acto = safe(formEls.actoInput.value);
   const cond = safe(formEls.condInput.value);
 
@@ -1279,14 +1370,60 @@ document.addEventListener("keydown", (e)=>{
 });
 
 
-function speak(text, anime=true){
+let __secAudio = null;
+
+async function speak(text){
+  const t = String(text||"").trim();
+  if (!t) return;
+
+  // Always prefer Cloud TTS so the voice is consistent across devices.
+  try{
+    __secIsSpeaking = true;
+    __secLastSpoken = t;
+    try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
+    __secAsrRunning = false;
+    toggleSecuritoTalking(true);
+
+    const r = await fetch("/.netlify/functions/tts", {
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body: JSON.stringify({ text: t })
+    });
+
+    if (r.ok){
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      if (__secAudio){ try{ __secAudio.pause(); }catch(e){} }
+      __secAudio = new Audio(url);
+      __secAudio.onended = ()=>{
+        try{ URL.revokeObjectURL(url); }catch(e){}
+        toggleSecuritoTalking(false);
+        __secIsSpeaking = false;
+        if (typeof __secAutoListen !== "undefined" && __secAutoListen){
+          try{
+            if (typeof __secAsrRestartT !== "undefined" && __secAsrRestartT) clearTimeout(__secAsrRestartT);
+            __secAsrRestartT = setTimeout(()=>{ try{ startListening(window.__secOnTextCB||null); }catch(e){} }, 700);
+          }catch(e){}
+        }
+      };
+      __secAudio.onerror = ()=>{
+        toggleSecuritoTalking(false);
+        __secIsSpeaking = false;
+      };
+      await __secAudio.play();
+      return;
+    }
+  }catch(e){
+    // fall through to local speechSynthesis
+  }
+
+  // Fallback (device voice). Not ideal, but better than silence.
   try{
     if (!("speechSynthesis" in window)) return;
-    const u = new SpeechSynthesisUtterance(text);
+    const u = new SpeechSynthesisUtterance(t);
     u.onstart = ()=>{
       __secIsSpeaking = true;
-      __secLastSpoken = String(text||"");
-      // Stop ASR while TTS is playing to avoid echo-loops.
+      __secLastSpoken = t;
       try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
       __secAsrRunning = false;
       toggleSecuritoTalking(true);
@@ -1294,22 +1431,17 @@ function speak(text, anime=true){
     u.onend = ()=>{
       toggleSecuritoTalking(false);
       __secIsSpeaking = false;
-      // Resume auto-listen only after speech ends.
       if (typeof __secAutoListen !== "undefined" && __secAutoListen){
         try{
-          if (typeof startListening === "function"){
-            // restart with a cooldown
-            if (typeof __secAsrRestartT !== "undefined" && __secAsrRestartT) clearTimeout(__secAsrRestartT);
-            __secAsrRestartT = setTimeout(()=>{ try{ startListening(window.__secOnTextCB||null); }catch(e){} }, 600);
-          }
+          if (typeof __secAsrRestartT !== "undefined" && __secAsrRestartT) clearTimeout(__secAsrRestartT);
+          __secAsrRestartT = setTimeout(()=>{ try{ startListening(window.__secOnTextCB||null); }catch(e){} }, 700);
         }catch(e){}
       }
     };
     u.onerror = ()=>{ toggleSecuritoTalking(false); __secIsSpeaking = false; };
     u.lang = "es-MX";
-    u.rate = anime ? 1.08 : 1.0;
-    u.pitch = anime ? 1.2 : 1.0;
-    // Try to pick a Spanish voice if available
+    u.rate = 1.04;
+    u.pitch = 1.16;
     const voices = speechSynthesis.getVoices();
     const v = voices.find(v=>/es/i.test(v.lang)) || voices[0];
     if (v) u.voice = v;
@@ -1475,7 +1607,8 @@ async function sendToSecurito(q, opts={}){
   const voiceOn = document.getElementById("secVoice");
   const anime = document.getElementById("secAnime");
   if (voiceOn?.checked){
-    speak(ans, anime?.checked);
+    // Cloud TTS keeps the voice consistent across devices.
+    speak(ans);
   } else {
     try{ setSecuritoState("idle"); startSecuritoBlink(); }catch(e){}
   }
@@ -1867,7 +2000,7 @@ function escapeHtml(str){
   function talk(text){
     const voiceOn = document.getElementById("secVoice")?.checked;
     if (!voiceOn) return;
-    speak(text, { anime: document.getElementById("secAnime")?.checked });
+    speak(text);
   }
 
   function hook(){
