@@ -1188,6 +1188,33 @@ function isFollowUpMessage(txt){
   return /^(por favor|porfa|si|sí|ok|va|dale|correcto|bien|continua|continúe|continua\.|continua\!|aj[aá]$|m[aá]s|mas|detalle(s)?|explica|ejemplo(s)?|hazlo|adelante)$/i.test(t);
 }
 
+
+
+// Fast friendly responses for greetings / meta questions (keeps "solo seguridad" but not rude)
+function fastSmallTalkAnswer(question, user){
+  const t = String(question||"").trim();
+  if (!t) return null;
+  const low = t.toLowerCase();
+  const name = (user?.name || user?.manager || "").toString().trim().split(/\s+/).slice(0,2).join(" ").trim();
+  const who = name ? `${name}` : "amigo";
+
+  // Greetings / courtesy
+  if (/^(hola|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|que\s+tal|hey|saludos)(\b|!|\.|,|$)/i.test(low)){
+    return `¡Hola, ${who}! 👋 Soy Securito.\n\nDime tu **hallazgo** (acto/condición insegura) y tu **objetivo** (ej. reducir, eliminar, capacitar) y te doy campaña, acciones y contramedidas.`;
+  }
+
+  // Asking why it speaks like that / identity
+  if (/(por\s+qu[eé]\s+hablas\s+as[ií]|por\s+qu[eé]\s+respondes\s+as[ií]|qu[eé]\s+eres|qu[eé]\s+haces|para\s+qu[eé]\s+sirves)/i.test(low)){
+    return `Hablo así porque estoy diseñado para ser **claro y accionable** en seguridad. 😄\n\nSi me dices qué viste y dónde (EPP, acto/condición, zona, estación), te doy pasos concretos para corregirlo.`;
+  }
+
+  // "Ayúdame a diseñar un plan" (sin contexto)
+  if (/(plan\s+espec[ií]fico|dise[nñ]ar\s+un\s+plan|hacer\s+un\s+plan|campan[aá])/i.test(low)){
+    return `Va, ${who}. Para armar el plan de seguridad necesito 2 datos:\n1) **Hallazgo** (¿qué acto/condición?)\n2) **Objetivo** (¿reducir cuánto y en qué tiempo?)\n\nEjemplo: "Casco no usado en C1, reducir 50% en 2 semanas".`;
+  }
+
+  return null;
+}
 // Very fast local answers for common safety topics (reduces mobile latency)
 function fastSafetyAnswer(question, user){
   const q = String(question||"").toLowerCase();
@@ -1220,8 +1247,14 @@ async function securitoAnswerSmart(question, records){
   // If user sends a follow-up (e.g., "por favor"), reuse last safety context
   const followUp = isFollowUpMessage(question) && !!window.__securitoLastSafetyQ;
   const effectiveQuestion = followUp
-    ? `${window.__securitoLastSafetyQ}\n\n[El usuario insiste/da seguimiento]: ${question}`
+    ? `${window.__securitoLastSafetyQ}
+
+[El usuario insiste/da seguimiento]: ${question}`
     : question;
+
+  // Fast friendly small-talk (greetings / meta). No llama IA.
+  const small = fastSmallTalkAnswer(effectiveQuestion, window.currentUser || state.user || {});
+  if (small) return small;
 
   // Ultra-fast local answer for frequent topics (reduces mobile latency)
   const fast = fastSafetyAnswer(effectiveQuestion, window.currentUser || {});

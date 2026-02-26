@@ -1,6 +1,16 @@
 import { json, requireEnv, supa } from "./_shared.js";
 
 
+
+function isGreeting(txt){
+  const t = String(txt||"").trim().toLowerCase();
+  return /^(hola|buenos\s+d[ií]as|buenas\s+tardes|buenas\s+noches|que\s+tal|hey|saludos)(\b|!|\.|,|$)/i.test(t);
+}
+function isMetaAboutSecurito(txt){
+  const t = String(txt||"").toLowerCase();
+  return /(por\s+qu[eé]\s+hablas\s+as[ií]|por\s+qu[eé]\s+respondes\s+as[ií]|qu[eé]\s+eres|qu[eé]\s+haces|para\s+qu[eé]\s+sirves)/i.test(t);
+}
+
 function isSafetyTopic(txt){
   const t = String(txt||"").toLowerCase();
   const kws = [
@@ -94,13 +104,26 @@ export async function handler(event){
     if (!question) return json(400, { ok:false, error:"Pregunta vacía" });
     if (!isSafetyTopic(question)){
       const meta = body?.meta || {};
+      const uname = (user?.name || "").toString().trim();
+      const first = uname ? uname.split(/\s+/).slice(0,2).join(" ") : "";
+      const who = first || "amigo";
+
+      // Greetings and small talk are allowed (we keep the scope but we don't act rude)
+      if (isGreeting(question)){
+        return json(200, { ok:true, answer:`¡Hola, ${who}! 👋 Soy Securito.\n\nCuéntame tu **situación de seguridad** (¿qué viste y en dónde?) y te doy acciones concretas.` });
+      }
+      if (isMetaAboutSecurito(question)){
+        return json(200, { ok:true, answer:`Hablo así para ser **claro y accionable** en seguridad. 😄\n\nDime qué hallazgo tienes (EPP/acto/condición/zona) y te digo qué hacer.` });
+      }
+
       // Allow short follow-ups like "por favor" if we have prior safety context
       if (meta?.followUp && meta?.lastSafetyQuestion){
-        // Merge previous safety question with follow-up
+        // allow: handled below by effectiveQuestion merge
       } else {
-        return json(200, { ok:true, answer:"Soy Securito y mi función es apoyar con **seguridad industrial**. Puedo ayudarte con EPP, actos/condiciones inseguras, LOTO, montacargas, ergonomía, evacuación y prevención. Si me dices tu situación de seguridad (¿qué viste y en dónde?), te doy acciones concretas." });
+        return json(200, { ok:true, answer:`${who}, yo solo apoyo con **seguridad industrial** (EPP, actos/condiciones inseguras, LOTO, ergonomía, prevención).\n\nSi me dices tu situación de seguridad (¿qué viste y en dónde?), te ayudo con pasos concretos.` });
       }
     }
+
 
     
     const meta = body?.meta || {};
@@ -169,7 +192,7 @@ const user = body?.user || {};
     const system = `Eres Securito, un asistente de SEGURIDAD industrial (EHS) para una planta automotriz.\n`+
       `Alcance: solo seguridad (actos/condiciones inseguras, PPE/EPP, riesgos, incidentes, ergonomía, 5S, LOTO, prevención).\n`+
       `Si la pregunta NO es de seguridad, responde amable y breve: "Soy Securito y mi función es apoyar con seguridad. Si tienes una situación de seguridad, cuéntame y te ayudo." y NO inventes información.\n`+
-      `Responde en español claro, directo y accionable (2–5 frases).\n`+
+      `Responde en español (MX) claro y humano, con tono amable y pro. Sé breve (2–5 frases), y usa el nombre del usuario si se conoce.\n`+
       `Si te piden TOP del día/semana, debes usar get_top y basarte solo en datos reales.`;
 
 
