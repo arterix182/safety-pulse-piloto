@@ -238,7 +238,7 @@ button.ghost{background: rgba(255,255,255,.04)}
 .splash{position:relative; width:160px; height:160px; margin:0 auto}
 .splashLogo{
   width:160px; height:160px;
-  animation: pulse 1.9s ease-in-out infinite;
+  
   filter: drop-shadow(0 18px 28px rgba(0,0,0,.45));
 }
 .splashGlow{
@@ -250,7 +250,7 @@ button.ghost{background: rgba(255,255,255,.04)}
   filter: blur(18px);
   animation: glow 2.2s ease-in-out infinite;
 }
-@keyframes pulse{0%,100%{transform: scale(1)}50%{transform: scale(1.04)}}
+50%{transform: scale(1.04)}}
 @keyframes glow{0%,100%{opacity:.65; transform: scale(1)}50%{opacity:1; transform: scale(1.08)}}
 
 @media (max-width:720px){
@@ -520,7 +520,7 @@ canvas{width:100%}
 .micBtn.listening .micDot{
   background:#12ff77;
   box-shadow: 0 0 0 6px rgba(18,255,119,.25);
-  animation: secPulse 1s infinite;
+  
 }
 @keyframes secPulse{0%{transform:scale(1);}50%{transform:scale(1.2);}100%{transform:scale(1);}}
 .micMeterWrap{display:flex; flex-direction:column; gap:6px; min-width:170px; margin-left:auto;}
@@ -538,227 +538,7 @@ canvas{width:100%}
 
 /* V23: simple mouth sync (approx) */
 .securitoHero{ position:relative; }
-.secMouth{
-  position:absolute;
-  left: 50%;
-  top: 34%;              /* Subimos más la boca */
-  width: 10%;
-  height: 4%;
-  border-radius: 0 0 18px 18px;
-  background: rgba(10,10,10,.9);
-  opacity: 0;
-  transform-origin: 50% 20%;
-  transform: translateX(-50%) scaleY(.6);
-}
-.securitoHero.talking .secMouth{
-  opacity: 1;
-  animation: mouthTalk 140ms infinite;
-}
-@keyframes mouthTalk{
-  0%{ transform: scaleY(0.55); }
-  50%{ transform: scaleY(1.15); }
-  100%{ transform: scaleY(0.55); }
-}
-
-/* If a duplicate hero bubble exists from old layout, hide it */
-.securitoHeroOverlay .heroBubble { display:none; }
-
-
-/* V25: clean hero + working controls */
-.securitoHero{
-  position: relative;
-  border-radius: 22px;
-  overflow: hidden;
-  margin-top: 14px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(0,0,0,.15);
-  min-height: 320px;
-}
-.securitoHeroImg{ width:100%; height:auto; display:block; }
-
-.securitoHeroOverlay{
-  position:absolute; inset:0;
-  display:flex;
-  align-items:flex-end;
-  justify-content:flex-end;
-  padding:18px;
-  pointer-events:none;
-}
-.heroBubble{
-  width: min(540px, 95%);
-  pointer-events:auto;
-  background: rgba(255, 214, 72, .90);
-  color: #141414;
-  border-radius: 22px;
-  padding: 16px 16px 14px 16px;
-  box-shadow: 0 22px 60px rgba(0,0,0,.35);
-}
-.heroTitle{font-weight: 900; font-size: 28px; letter-spacing:.2px;}
-.heroText{margin-top: 8px; font-size: 15px; line-height:1.35; opacity:.92;}
-.heroNote{margin-top:10px; font-size:12px; opacity:.85;}
-
-.heroControls{
-  margin-top: 14px;
-  display:flex;
-  gap: 10px;
-  align-items:center;
-  flex-wrap:wrap;
-}
-.micBtn{ position:relative; min-width: 120px; }
-.micDot{
-  width:10px;height:10px;border-radius:999px;
-  display:inline-block;
-  margin-right:10px;
-  background: rgba(255,255,255,.55);
-}
-.micBtn.listening .micDot{
-  background: #12ff77;
-  box-shadow: 0 0 0 6px rgba(18,255,119,.25);
-  animation: secPulse 1s infinite;
-}
-@keyframes secPulse{ 0%{transform:scale(1);} 50%{transform:scale(1.2);} 100%{transform:scale(1);} }
-
-.micMeterWrap{
-  display:flex; flex-direction:column; gap:6px;
-  min-width: 180px;
-  margin-left:auto;
-}
-.micMeterLabel{font-size:12px; font-weight:800; opacity:.85;}
-.micMeter{
-  height: 10px; border-radius: 999px;
-  background: rgba(0,0,0,.18);
-  overflow:hidden;
-  border: 1px solid rgba(0,0,0,.12);
-}
-.micMeterFill{
-  height:100%;
-  width: 0%;
-  background: rgba(16, 180, 80, .95);
-  transition: width 90ms linear;
-}
-.heroToggles{ margin-top: 12px; display:flex; gap: 14px; flex-wrap:wrap; }
-
-/* V25: mouth overlay (approx position on new hero image) */
-.secMouth{
-  position:absolute;
-  left: 260px;
-  top: 420px;
-  width: 40px;
-  height: 16px;
-  border-radius: 0 0 18px 18px;
-  background: rgba(15,15,15,.78);
-  opacity: 0;
-  transform-origin: 50% 20%;
-}
-.securitoHero.talking .secMouth{
-  opacity: 1;
-  animation: mouthTalk 140ms infinite;
-}
-@keyframes mouthTalk{
-  0%{ transform: scaleY(0.55); }
-  50%{ transform: scaleY(1.2); }
-  100%{ transform: scaleY(0.55); }
-}
-
-/* V26: show Securito controls always (no overlay dependence) */
-.securitoTop{
-  display:flex;
-  gap:16px;
-  align-items:stretch;
-  margin-top: 14px;
-}
-.securitoHero{
-  flex: 1 1 55%;
-  position: relative;
-  border-radius: 22px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(0,0,0,.15);
-  min-height: 320px;
-}
-.heroBubblePanel{
-  flex: 1 1 45%;
-  border-radius: 22px;
-  padding: 16px;
-  background: rgba(255, 214, 72, .92);
-  color: #141414;
-  border: 1px solid rgba(0,0,0,.10);
-  box-shadow: 0 18px 50px rgba(0,0,0,.28);
-  display:flex;
-  flex-direction:column;
-  justify-content:flex-start;
-}
-@media (max-width: 980px){
-  .securitoTop{ flex-direction:column; }
-  .securitoHero, .heroBubblePanel{ flex: 1 1 auto; }
-}
-
-/* V27: Simplified Securito layout (avatar + chat only) */
-.securitoSplit{
-  display:grid;
-  grid-template-columns: 360px 1fr;
-  gap: 16px;
-  margin-top: 14px;
-}
-@media (max-width: 980px){
-  .securitoSplit{ grid-template-columns: 1fr; }
-}
-
-.securitoAvatarCard{
-  border-radius: 22px;
-  padding: 14px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(0,0,0,.18);
-}
-
-.securitoChatCard{
-  border-radius: 22px;
-  padding: 16px;
-  border: 1px solid rgba(255,255,255,.08);
-  background: rgba(0,0,0,.16);
-  display:flex;
-  flex-direction:column;
-  min-height: 520px;
-}
-
-.securitoAvatarWrap{
-  position: relative;
-  width: 100%;
-  aspect-ratio: 1 / 1.05;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  background: radial-gradient(circle at 35% 25%, rgba(255,214,72,.18), rgba(0,0,0,0) 55%);
-  border-radius: 18px;
-  overflow:hidden;
-}
-.securitoRobot{
-  width: 92%;
-  height: auto;
-  display:block;
-  filter: drop-shadow(0 18px 30px rgba(0,0,0,.35));
-}
-
-/* Mouth overlay positioned on robot face (percentage based) */
-.secMouth{
-  position:absolute;
-  left: 47%;
-  top: 42%;
-  width: 12%;
-  height: 5%;
-  border-radius: 0 0 16px 16px;
-  background: rgba(20,20,20,.78);
-  opacity: 0;
-  transform-origin: 50% 20%;
-  transform: translateX(-50%) scaleY(.6);
-}
-.securitoAvatarWrap.talking .secMouth{
-  opacity: 1;
-  animation: mouthTalk 140ms infinite;
-}
-@keyframes mouthTalk{
-  0%{ transform: translateX(-50%) scaleY(0.55); }
-  50%{ transform: translateX(-50%) scaleY(1.25); }
+50%{ transform: translateX(-50%) scaleY(1.25); }
   100%{ transform: translateX(-50%) scaleY(0.55); }
 }
 
@@ -772,3 +552,58 @@ canvas{width:100%}
 
 /* Ensure chat log grows */
 #secLog{ flex: 1 1 auto; min-height: 260px; overflow:auto; }
+
+/* V29: Securito states (idle/listening/thinking/speaking) */
+.securitoAvatarWrap{ position: relative; }
+.securitoAvatarWrap .securitoRobot{
+  position:absolute;
+  inset: 0;
+  margin:auto;
+  width: 92%;
+  height: auto;
+  opacity: 0;
+  /* No scale/zoom/flash when swapping frames */
+  transform: translateY(0);
+  transition: opacity 120ms linear;
+  pointer-events:none;
+}
+.securitoAvatarWrap .securitoRobot.is-active{
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.securitoAvatarWrap .securitoRobot.is-active{ filter: drop-shadow(0 18px 30px rgba(0,0,0,.35)); }
+
+/* V30: constrain Securito avatar size (avoid huge zoom / overlay) */
+.securitoAvatarCard{ overflow:hidden; }
+.securitoAvatarWrap{
+  width: 100%;
+  max-width: 520px;
+  margin: 0 auto;
+  height: min(48vh, 420px);
+  min-height: 300px;
+  border-radius: 18px;
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.06), rgba(0,0,0,0.0));
+}
+.securitoAvatarWrap .securitoRobot{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+@media (max-width: 900px){
+  .securitoSplit{ grid-template-columns: 1fr !important; }
+  .securitoAvatarWrap{ height: min(42vh, 360px); min-height: 260px; }
+}
+
+/* V33: Securito no-pulse + calmer blink */
+.securitoAvatarWrap, .securitoAvatarWrap .securitoRobot{ animation:none !important; }
+
+
+/* ✅ SECURITO: hard-disable any "pulse"/zoom caused by transform transitions */
+.securitoAvatarWrap .securitoRobot{
+  transform: none !important;
+  transition: opacity 120ms ease, filter 140ms ease !important;
+}
+.securitoAvatarWrap .securitoRobot.is-active{
+  transform: none !important;
+}

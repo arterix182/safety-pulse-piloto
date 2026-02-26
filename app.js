@@ -109,6 +109,10 @@ function losLabel(person){
 function setView(name){
   Object.values(VIEWS).forEach(v => v.classList.remove("active"));
   VIEWS[name].classList.add("active");
+  // Securito free conversation mode only inside its view
+  __secFreeMode = (name === "securito");
+  if (!__secFreeMode){ try{ stopListening(); }catch(e){} }
+
   // bottom bar active
   $$(".navbtn").forEach(b => b.classList.remove("active"));
   const map = {home:"home", dashboard:"dashboard", manual:"manual", securito:"securito"};
@@ -858,6 +862,9 @@ async function securitoAnswer(question, records){
 }
 
 async function openSecurito(){
+  __secFreeMode = true;
+  __secActiveUntil = Date.now() + 3600*1000; // keep window alive while inside view
+
   setView("securito");
   const all = await dbGetAll();
   const ctx = topContextFromRecords(all);
@@ -868,7 +875,13 @@ async function openSecurito(){
     log.dataset.init = "1";
     secLog("Securito", "Estoy listo. Dime el hallazgo y tu objetivo. Te doy campaña, acciones y contramedidas.");
   }
+
+  // Start natural idle blink
+  try{ startSecuritoBlink(); }catch(e){}
+  // Auto-listen when entering Securito (no button needed)
+  try{ enableSecuritoAutoListen(true); }catch(e){}
 }
+
 
 document.addEventListener("click", (e)=>{
   const t = e.target;
@@ -884,8 +897,7 @@ document.addEventListener("click", (e)=>{
     const q = inp ? inp.value.trim() : "";
     if (!q) return;
     if (inp) inp.value = "";
-    secLog("Tú", q);
-    securitoAnswer(q, loadRecords()).then(ans => secLog("Securito", ans));
+    sendToSecurito(q);
   }
 });
 
@@ -935,17 +947,150 @@ async function refreshSecuritoContext(){
   return {all, ctx};
 }
 
-async function sendToSecurito(q){
+
+let __secActiveUntil = 0;         // conversation window after wake-word
+let __secLastUserAt = 0;
+let __secFreeMode = false;      // if true, respond without wake-word (inside Securito view)
+
+
+function __norm(t){
+  return String(t||"")
+    .toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9\s]/g," ")
+    .replace(/\s+/g," ")
+    .trim();
+}
+function __lev(a,b){
+  a=__norm(a); b=__norm(b);
+  const n=a.length, m=b.length;
+  if (!n) return m; if (!m) return n;
+  const dp = new Array(m+1);
+  for (let j=0;j<=m;j++) dp[j]=j;
+  for (let i=1;i<=n;i++){
+    let prev=dp[0]; dp[0]=i;
+    for (let j=1;j<=m;j++){
+      const tmp=dp[j];
+      const cost = a[i-1]===b[j-1] ? 0 : 1;
+      dp[j]=Math.min(dp[j]+1, dp[j-1]+1, prev+cost);
+      prev=tmp;
+    }
+  }
+  return dp[m];
+}
+function __sim(a,b){
+  const A=__norm(a), B=__norm(b);
+  const L=Math.max(A.length,B.length)||1;
+  return 1-(__lev(A,B)/L);
+}
+function __canon(tok){
+  // light phonetic-ish normalization for Spanish/EN ASR weirdness
+  const t = __norm(tok)
+    .replace(/h/g,"")
+    .replace(/[cqk]/g,"k")
+    .replace(/[vw]/g,"b")
+    .replace(/z/g,"s")
+    .replace(/x/g,"ks")
+    .replace(/rr/g,"r");
+  // remove vowels to compare consonant skeleton
+  return t.replace(/[aeiou]/g,"");
+}
+function __wakeScoreToken(tok){
+  const trg = ["securito","segurito","security","sekurito","sekurity"];
+  let best = 0;
+  for (const w of trg){
+    best = Math.max(best, __sim(tok,w), __sim(__canon(tok), __canon(w)));
+  }
+  return best;
+}
+
+function __hasWake(raw){
+  const t = __norm(raw);
+  if (!t) return false;
+
+  if (t.includes("securito") || t.includes("segurito") || t.includes("security")) return true;
+
+  const tokens = t.split(" ").filter(Boolean);
+
+  let best = 0;
+  for (let i=0;i<tokens.length;i++){
+    best = Math.max(best, __wakeScoreToken(tokens[i]));
+    if (i < tokens.length-1){
+      best = Math.max(best, __wakeScoreToken(tokens[i] + tokens[i+1]));
+    }
+  }
+  return best >= 0.70;
+}
+function __stripWake(raw){
+  const t = __norm(raw);
+  const parts = t.split(" ").filter(Boolean);
+  if (!parts.length) return "";
+
+  let bestI = -1, bestLen = 1, bestS = 0;
+  for (let i=0;i<parts.length;i++){
+    const s1 = __wakeScoreToken(parts[i]);
+    if (s1 > bestS){ bestS=s1; bestI=i; bestLen=1; }
+    if (i < parts.length-1){
+      const bi = parts[i] + parts[i+1];
+      const s2 = __wakeScoreToken(bi);
+      if (s2 > bestS){ bestS=s2; bestI=i; bestLen=2; }
+    }
+  }
+
+  if (bestS >= 0.70 && bestI >= 0){
+    const rest = parts.slice(0, bestI).concat(parts.slice(bestI+bestLen));
+    return rest.join(" ").trim();
+  }
+
+  return raw.replace(/^securito\b[\s,:-]*/i,"").trim();
+}
+
+async function sendToSecurito(q, opts={}){
   if (!q) return;
+  const raw = String(q).trim();
+  const now = Date.now();
+
+  const woke = __hasWake(raw);
+  const inWindow = now < __secActiveUntil;
+
+  // If no wake and not in active window, ignore (but don't spam hints for partial ASR)
+  if (!__secFreeMode && !woke && !inWindow){
+    if (!opts.silentHint){
+      secLog("Securito", "Para activarme di: **SECURITO** + tu solicitud. Ej: \"SECURITO campaña uso de casco\".");
+    }
+    return;
+  }
+
+  // Open/extend active window when wake is detected
+  if (woke) __secActiveUntil = now + 20000;
+  if (__secFreeMode) __secActiveUntil = now + 3600*1000;
+
+  const cleaned = (woke ? __stripWake(raw) : __norm(raw)).trim();
+  if (!cleaned){
+    secLog("Securito", "Te escucho. Dime tu hallazgo y objetivo.");
+    return;
+  }
+
+  __secLastUserAt = now;
+
   const inp = document.getElementById("secInput");
   if (inp) inp.value = "";
-  secLog("Tú", q);
+  secLog("Tú", woke ? raw : cleaned);
+
+  try{ setSecuritoState("thinking"); }catch(e){}
+
   const all = await dbGetAll();
-  const ans = await securitoAnswer(q, all);
+  const ans = await securitoAnswer(cleaned, all);
+
   secLog("Securito", ans);
+
   const voiceOn = document.getElementById("secVoice");
   const anime = document.getElementById("secAnime");
-  if (voiceOn?.checked) speak(ans, anime?.checked);
+  if (voiceOn?.checked){
+    speak(ans, anime?.checked);
+  } else {
+    try{ setSecuritoState("idle"); startSecuritoBlink(); }catch(e){}
+  }
 }
 
 document.addEventListener("click", (e)=>{
@@ -987,7 +1132,7 @@ document.addEventListener("keydown", (e)=>{
 
 
 // V22: Securito listening UI + mic level meter + speech-to-text (browser)
-window.window.__secRec = window.window.__secRec || null;
+window.__secRec = window.__secRec || null;
 let __secAudioStream = null;
 let __secAudioCtx = null;
 let __secAnalyser = null;
@@ -998,67 +1143,150 @@ function secSetListening(on){
   const label = document.getElementById("secListenLabel");
   if (btn) btn.classList.toggle("listening", !!on);
   if (label) label.textContent = on ? "Escuchando…" : "Listo";
+  try{ if (__secState !== "speaking") setSecuritoState(on ? "listening" : "idle"); }catch(e){}
 }
 
 // V23: wrappers used by UI buttons (fix ReferenceError)
-window.window.__secRec = window.window.__secRec || null;
+window.__secRec = window.__secRec || null;
+
+
+// ---------- Voice (ASR) engine (stable, auto-send) ----------
+window.__secRec = window.__secRec || null;
+let __secAutoListen = false;
+let __secAsrRunning = false;
+let __secAsrRestartT = null;
+let __secAsrDebounceT = null;
+let __secAsrLastText = "";
+let __secAsrLastAt = 0;
+
+function enableSecuritoAutoListen(on){
+  __secAutoListen = !!on;
+  if (__secAutoListen){
+    // Try to start immediately (will prompt mic permission on first user gesture)
+    startListening((txt, isFinal)=>{ __secHandleAsrText(txt, isFinal); });
+  } else {
+    stopListening();
+  }
+}
+
+function __secHandleAsrText(text, isFinal){
+  const t = String(text||"").trim();
+  if (!t) return;
+
+  __secAsrLastText = t;
+  __secAsrLastAt = Date.now();
+
+  // Live transcription into input (so user sees what's happening)
+  const inp = document.getElementById("secInput");
+  if (inp) inp.value = t;
+
+  // Debounce: if user pauses ~900ms, treat as final
+  if (__secAsrDebounceT) clearTimeout(__secAsrDebounceT);
+  __secAsrDebounceT = setTimeout(()=>{
+    // If we haven't received new text recently, auto-send
+    const age = Date.now() - __secAsrLastAt;
+    if (age > 750 && __secAsrLastText){
+      const toSend = __secAsrLastText;
+      __secAsrLastText = "";
+      if (inp) inp.value = "";
+      sendToSecurito(toSend, {silentHint:false});
+    }
+  }, 900);
+
+  // If browser marks it final, auto-send immediately
+  if (isFinal){
+    if (__secAsrDebounceT) clearTimeout(__secAsrDebounceT);
+    __secAsrDebounceT = null;
+    const toSend = t;
+    __secAsrLastText = "";
+    if (inp) inp.value = "";
+    sendToSecurito(toSend, {silentHint:false});
+  }
+}
 
 function startListening(onText){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return false;
 
   try{
+    // prevent rapid re-entrancy
+    if (__secAsrRunning) return true;
+
     secSetListening(true);
-    // start mic meter (non-blocking)
     secStartMicLevel();
 
     if (window.__secRec) { try{ window.__secRec.stop(); }catch(e){} }
+
     const r = new SR();
     window.__secRec = r;
-    r.lang = "es-MX";
-    r.interimResults = true;
-    r.continuous = false;
 
-    let finalText = "";
+    r.lang = "es-MX";              // force Spanish (Mexico)
+    r.interimResults = true;
+    r.continuous = true;           // keep session open to avoid UI flicker
+    r.maxAlternatives = 3;
+
+    __secAsrRunning = true;
+
     r.onresult = (ev)=>{
+      let finalText = "";
       let interim = "";
       for (let i=ev.resultIndex; i<ev.results.length; i++){
-        const txt = ev.results[i][0].transcript;
-        if (ev.results[i].isFinal) finalText += txt;
-        else interim += txt;
+        const res = ev.results[i];
+        const txt = (res[0]?.transcript || "").trim();
+        if (!txt) continue;
+        if (res.isFinal) finalText += (finalText ? " " : "") + txt;
+        else interim += (interim ? " " : "") + txt;
       }
-      const combined = (finalText + interim).trim();
-      if (onText) onText(combined, false);
-      // If last result is final, notify
-      const last = ev.results[ev.results.length-1];
-      if (last && last.isFinal){
-        if (onText) onText((finalText).trim(), true);
-      }
+      const combined = (finalText || interim).trim();
+      if (combined && onText) onText(combined, !!finalText);
     };
+
     r.onerror = ()=>{
+      __secAsrRunning = false;
       secSetListening(false);
+      // Auto-restart only if auto-listen is enabled
+      if (__secAutoListen){
+        if (__secAsrRestartT) clearTimeout(__secAsrRestartT);
+        __secAsrRestartT = setTimeout(()=> startListening(onText), 700);
+      } else {
+        secStopMicLevel();
+      }
     };
+
     r.onend = ()=>{
-      secSetListening(false);
-      // keep mic meter until stop button, so user sees level while talking
+      __secAsrRunning = false;
+      // If auto listen is enabled, restart with a small cooldown to avoid rapid loops
+      if (__secAutoListen){
+        secSetListening(true); // keep UI steady
+        if (__secAsrRestartT) clearTimeout(__secAsrRestartT);
+        __secAsrRestartT = setTimeout(()=> startListening(onText), 450);
+      } else {
+        secSetListening(false);
+        secStopMicLevel();
+      }
     };
 
     r.start();
     return true;
   }catch(e){
+    __secAsrRunning = false;
     secSetListening(false);
     return false;
   }
 }
 
 function stopListening(){
+  __secAutoListen = false;
   try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
   window.__secRec = null;
+  __secAsrRunning = false;
+  if (__secAsrRestartT) clearTimeout(__secAsrRestartT);
+  __secAsrRestartT = null;
+  if (__secAsrDebounceT) clearTimeout(__secAsrDebounceT);
+  __secAsrDebounceT = null;
   secSetListening(false);
   secStopMicLevel();
 }
-
-
 
 async function secStartMicLevel(){
   try{
@@ -1146,7 +1374,7 @@ window.addEventListener("DOMContentLoaded", ()=>{
         if (input) input.value = (finalText + interim).trim();
       };
       window.__secRec.onerror = ()=>{ secSetListening(false); };
-      window.__secRec.onend = ()=>{ secSetListening(false); };
+      window.__secRec.onend = ()=>{ secSetListening(false); try{ const v=input?.value?.trim(); if(v){ document.getElementById("secSend")?.click(); } }catch(e){} };
 
       try{ window.__secRec.start(); }catch(e){ secSetListening(false); }
     });
@@ -1157,6 +1385,8 @@ window.addEventListener("DOMContentLoaded", ()=>{
       try{ if (window.__secRec) window.__secRec.stop(); }catch(e){}
       window.__secRec = null;
       secSetListening(false);
+      try{ setSecuritoState("idle");
+    startSecuritoBlink(); startSecuritoBlink(); }catch(e){}
       secStopMicLevel();
     });
   }
@@ -1164,9 +1394,18 @@ window.addEventListener("DOMContentLoaded", ()=>{
 
 
 function toggleSecuritoTalking(on){
-  const wrap = document.querySelector(".securitoAvatarWrap");
-  if (wrap) wrap.classList.toggle("talking", !!on);
+  // Tie TTS to avatar states
+  if (on){
+    try{ stopSecuritoBlink();
+    setSecuritoState("speaking"); }catch(e){}
+    try{ startSecuritoSpeakingAnim(); }catch(e){}
+  }else{
+    try{ stopSecuritoSpeakingAnim(); }catch(e){}
+    try{ setSecuritoState("idle");
+    startSecuritoBlink(); }catch(e){}
+  }
 }
+
 
 
 function escapeHtml(str){
@@ -1241,6 +1480,7 @@ function escapeHtml(str){
       const msg = input?.value?.trim();
       if (!msg) return;
       log("Tú", escapeHtml(msg));
+      try{ setSecuritoState("thinking"); }catch(e){}
       if (input) input.value = "";
       const ctx = await refreshContext();
       const ans = respond(msg, ctx);
@@ -1294,3 +1534,108 @@ function escapeHtml(str){
     }
   });
 })();
+
+
+/* V29: Securito state machine */
+let __secState = "idle";
+let __secSpeakBlink = null;
+
+function setSecuritoState(state){
+  __secState = state || "idle";
+  const wrap = document.querySelector(".securitoAvatarWrap");
+  if (!wrap) return;
+  wrap.dataset.state = __secState;
+  const imgs = wrap.querySelectorAll(".securitoRobot[data-secstate]");
+  imgs.forEach(img => img.classList.toggle("is-active", img.dataset.secstate === __secState));
+}
+
+function startSecuritoSpeakingAnim(){
+  stopSecuritoSpeakingAnim();
+  const wrap = document.querySelector(".securitoAvatarWrap");
+  if (!wrap) return;
+
+  // ✅ Natural-ish mouth movement (no pulsing/zoom). We only swap frames.
+  const tick = () => {
+    if (__secState !== "speaking") return;
+    const speaking = wrap.querySelector('.securitoRobot[data-secstate="speaking"]');
+    const idle = wrap.querySelector('.securitoRobot[data-secstate="idle"]');
+    if (!speaking || !idle) return;
+
+    // Random cadence: faster on "speech", occasional micro-pauses
+    const pause = Math.random() < 0.12; // 12% chance: brief closed-mouth pause
+    const nextDelay = pause ? (170 + Math.random()*140) : (85 + Math.random()*65);
+
+    const speakOn = speaking.classList.contains("is-active");
+    // If pausing, force mouth closed (idle on). Else alternate.
+    if (pause){
+      speaking.classList.remove("is-active");
+      idle.classList.add("is-active");
+    } else {
+      speaking.classList.toggle("is-active", !speakOn);
+      idle.classList.toggle("is-active", speakOn);
+    }
+
+    __secSpeakBlink = setTimeout(tick, nextDelay);
+  };
+
+  tick();
+}
+
+function stopSecuritoSpeakingAnim(){
+  if (__secSpeakBlink){ clearTimeout(__secSpeakBlink); __secSpeakBlink = null; }
+  // restore to a stable frame
+  const wrap = document.querySelector(".securitoAvatarWrap");
+  if (!wrap) return;
+  const speaking = wrap.querySelector('.securitoRobot[data-secstate="speaking"]');
+  const idle = wrap.querySelector('.securitoRobot[data-secstate="idle"]');
+  if (speaking) speaking.classList.remove("is-active");
+  if (idle) idle.classList.add("is-active");
+}
+
+
+
+/* V33+: natural blink (human timing) */
+let __secBlinkTimer = null;
+
+function startSecuritoBlink(){
+  stopSecuritoBlink();
+
+  const loop = () => {
+    const wrap = document.querySelector(".securitoAvatarWrap");
+    // If view not mounted yet, retry shortly instead of dying forever
+    if (!wrap){
+      __secBlinkTimer = setTimeout(loop, 500);
+      return;
+    }
+
+    // Don't blink while speaking flap is running
+    if (__secState !== "speaking"){
+      // Blink without changing the global state machine (avoids fighting with ASR/listening UI)
+      const thinking = wrap.querySelector('.securitoRobot[data-secstate="thinking"]');
+      const active = wrap.querySelector('.securitoRobot.is-active');
+      if (thinking && active){
+        const prevEl = active;
+        thinking.classList.add("is-active");
+        prevEl.classList.remove("is-active");
+        const dur = 150 + Math.random()*60; // 150–210ms
+        setTimeout(() => {
+          if (__secState !== "speaking"){
+            thinking.classList.remove("is-active");
+            prevEl.classList.add("is-active");
+          }
+        }, dur);
+      }
+    }
+
+    const next = 4800 + Math.random()*3400; // 4.8s – 8.2s
+    __secBlinkTimer = setTimeout(loop, next);
+  };
+
+  // First blink after a short natural delay
+  __secBlinkTimer = setTimeout(loop, 2400 + Math.random()*1800);
+}
+
+function stopSecuritoBlink(){
+  if (__secBlinkTimer){ clearTimeout(__secBlinkTimer); __secBlinkTimer = null; }
+}
+
