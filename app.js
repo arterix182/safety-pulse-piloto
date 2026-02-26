@@ -1129,8 +1129,7 @@ function _countTop(records, pick){
   return Object.entries(mm).sort((a,b)=>b[1]-a[1]).slice(0,3);
 }
 function _fmtTop(arr){
-  return arr.length ? arr.map(([k,v])=>`• ${k}: ${v}`).join("
-") : "—";
+  return arr.length ? arr.map(([k,v])=>`• ${k}: ${v}`).join("\n") : "—";
 }
 
 /**
@@ -1169,8 +1168,7 @@ ${_fmtTop(ctxWeek.topC)}`,
 ${_fmtTop(ctxAll.topA)}`,
     `Condiciones:
 ${_fmtTop(ctxAll.topC)}`
-  ].join("
-");
+  ].join("\n");
 
   return { day: ctxDay, week: ctxWeek, all: ctxAll, text };
 }
