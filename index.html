@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <meta name="theme-color" content="#facc15"/>
+  <link rel="manifest" href="manifest.webmanifest"/>
+  <link rel="icon" href="assets/logo.png"/>
+  <title>SAFETY APP</title>
+  <link rel="stylesheet" href="styles.css?v=36"/>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand" role="button" tabindex="0" id="brandBtn" title="Inicio">
+        <img class="brandLogo" src="assets/logo.webp" alt="Logo"/>
+        <div class="brandText">
+          <div class="brandName">SAFETY APP</div>
+          <div class="brandSub" id="brandSub">Securito • Seguridad</div>
+        </div>
+      </div>
+      <div class="topActions">
+        <button class="ghost" id="exportBtn" title="Exportar CSV" aria-label="Exportar">Exportar</button>
+        <button class="ghost" id="logoutBtn" title="Salir" aria-label="Salir">Salir</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- View: Welcome -->
+      <section class="view active" id="viewWelcome">
+        <div class="center">
+          <div class="splash splashPro" aria-label="Logo animado">
+            <div class="splashRing" aria-hidden="true"></div>
+            <div class="splashSpark" aria-hidden="true"></div>
+            <img src="assets/logo.webp" class="splashLogo splashFloat" alt=""/>
+            <div class="splashGlow"></div>
+          </div>
+          <h1>SAFETY APP</h1>
+          <p>Registra recorridos e interacciones.</p>
+          <button class="ctaLaunch" id="goLogin" type="button">
+            <span class="ctaFx" aria-hidden="true"></span>
+            <span class="ctaText">Desplegar</span>
+            <span class="ctaSub">Entrar a operación</span>
+          </button>
+</div>
+      </section>
+
+      <!-- View: Login -->
+      <section class="view" id="viewLogin">
+        <div class="card">
+          <h2>Login (GMIN)</h2>
+          <p class="muted">Ingresa tu GMIN. Se validará contra el directorio local.</p>
+          <label class="field">
+            <span>GMIN</span>
+            <input id="gminInput" inputmode="numeric" autocomplete="off" placeholder="Ej. 123456"/>
+          </label>
+          <button class="primary" id="loginBtn">Continuar</button>
+          <div class="msg" id="loginMsg"></div>
+          <button class="ghost full" id="backWelcome">Volver</button>
+        </div>
+      </section>
+
+      <!-- View: Home -->
+      <section class="view" id="viewHome">
+        <div class="hero">
+          <div class="heroLeft">
+            <div class="badge" id="userBadge">—</div>
+            <h2 id="hello">Hola</h2>
+            <p class="muted" id="userMeta">—</p>
+          </div>
+          <div class="heroRight">
+            <div class="kpi">
+              <div class="kpiNum" id="kpiRec">0</div>
+              <div class="kpiLbl">Recorridos</div>
+            </div>
+            <div class="kpi">
+              <div class="kpiNum" id="kpiInt">0</div>
+              <div class="kpiLbl">Interacciones</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid">
+          <button class="tile" data-go="recorrido">
+            <div class="tileIcon">🛡️</div>
+            <div class="tileText">
+              <div class="tileTitle">Recorrido</div>
+              <div class="tileSub">Actos / Condiciones</div>
+            </div>
+          </button>
+
+          <button class="tile" data-go="interaccion">
+            <div class="tileIcon">🤝</div>
+            <div class="tileText">
+              <div class="tileTitle">Interacciones</div>
+              <div class="tileSub">Conversación y hallazgos</div>
+            </div>
+          </button>
+
+          <button class="tile" data-go="dashboard">
+            <div class="tileIcon">📈</div>
+            <div class="tileText">
+              <div class="tileTitle">Dashboard</div>
+              <div class="tileSub">KPIs (local piloto)</div>
+            </div>
+          </button>
+
+          <button class="tile" data-go="manual">
+            <div class="tileIcon">📘</div>
+            <div class="tileText">
+              <div class="tileTitle">Manual</div>
+              <div class="tileSub">Uso rápido</div>
+            </div>
+          </button>
+        </div>
+
+        <!-- FAB "Registrar" eliminado (UI más limpio en móvil) -->
+      </section>
+
+      <!-- View: Form (shared) -->
+      <section class="view" id="viewForm">
+        <div class="card wide">
+          <div class="formHeader">
+            <h2 id="formTitle">Registro</h2>
+            <div class="pill" id="formTypePill">—</div>
+          </div>
+
+          <div class="row3">
+            <label class="field">
+              <span>GMIN auditado</span>
+              <input id="auditedGmin" inputmode="numeric" placeholder="GMIN auditado"/>
+            </label>
+            <div class="field read">
+              <span>Línea</span>
+              <div class="readonly" id="autoLine">—</div>
+            </div>
+            <div class="field read">
+              <span>Turno</span>
+              <div class="readonly" id="autoShift">—</div>
+            </div>
+          </div>
+
+          <div class="row2">
+            <div class="field read">
+              <span>Nombre auditado</span>
+              <div class="readonly" id="auditedName">—</div>
+            </div>
+            <div class="field read">
+              <span>Área (Plant)</span>
+              <div class="readonly" id="auditedPlant">—</div>
+            </div>
+          </div>
+
+          <div class="row2">
+            <div class="field read">
+              <span>Antigüedad</span>
+              <div class="readonly" id="auditedLos">—</div>
+            </div>
+            <div class="field read">
+              <span>Manager</span>
+              <div class="readonly" id="auditedMgr">—</div>
+            </div>
+          </div>
+
+          
+          <div class="seg">
+            <button class="segBtn active" id="pickActo" type="button">Acto inseguro</button>
+            <button class="segBtn" id="pickCond" type="button">Condición insegura</button>
+          </div>
+          <div class="hintSmall">Selecciona <b>solo una</b>: acto <i>o</i> condición.</div>
+
+<div id="actoWrap"><label class="field">
+            <span>Acto inseguro</span>
+            <input id="actoInput" placeholder="Buscar…"/>
+            <div class="combo" id="actoCombo"></div>
+          </label></div>
+
+          <div id="condWrap" style="display:none"><label class="field">
+            <span>Condición insegura</span>
+            <input id="condInput" placeholder="Buscar…"/>
+            <div class="combo" id="condCombo"></div>
+          </label></div>
+
+          <label class="field">
+            <span>Comentario (opcional)</span>
+            <textarea id="commentInput" rows="3" placeholder="Describe brevemente…"></textarea>
+          </label>
+
+          <div class="actions">
+            <button class="ghost" id="formBack">Volver</button>
+            <button class="primary" id="saveBtn">Guardar</button>
+            <button class="ghost" id="saveNewBtn">Guardar + Nuevo</button>
+          </div>
+
+          <div class="msg" id="saveMsg"></div>
+        </div>
+      </section>
+
+      <!-- View: Dashboard -->
+      <section class="view" id="viewDashboard">
+        <div class="card wide">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div>
+              <h2 style="margin:0">Dashboard (Nube)</h2>
+              <p class="muted" style="margin:6px 0 0">Datos centralizados y sincronización automática. Si no hay red, guarda y sincroniza al volver.</p>
+            </div>
+            <div id="cloudBadge" class="chip" title="Estado de sincronización">☁️ Verificando…</div>
+          </div>
+
+          <div class="filters">
+            <div class="row3">
+              <label class="field">
+                <span>Tipo</span>
+                <select id="fType">
+                  <option value="all">Todos</option>
+                  <option value="recorrido">Recorrido</option>
+                  <option value="interaccion">Interacción</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Desde</span>
+                <input id="fFrom" type="date"/>
+              </label>
+              <label class="field">
+                <span>Hasta</span>
+                <input id="fTo" type="date"/>
+              </label>
+            </div>
+
+            <div class="row3">
+              <label class="field">
+                <span>Plant (auditado)</span>
+                <select id="fPlant"><option value="all">Todas</option></select>
+              </label>
+              <label class="field">
+                <span>Turno (auditado)</span>
+                <select id="fShift"><option value="all">Todos</option></select>
+              </label>
+              <label class="field">
+                <span>Registró (GMIN)</span>
+                <input id="fUser" placeholder="Ej. 123456"/>
+              </label>
+            </div>
+
+            <div class="row3">
+              <label class="field">
+                <span>Acto inseguro</span>
+                <select id="fActo"><option value="all">Todos</option></select>
+              </label>
+              <label class="field">
+                <span>Condición insegura</span>
+                <select id="fCond"><option value="all">Todas</option></select>
+              </label>
+              <div class="field">
+                <span>Acción</span>
+                <button class="ghost full" id="applyFilters">Aplicar filtros</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="row3">
+            <div class="kpi bigkpi">
+              <div class="kpiNum" id="dbTotal">0</div>
+              <div class="kpiLbl">Registros (filtrados)</div>
+            </div>
+            <div class="kpi bigkpi">
+              <div class="kpiNum" id="dbActoTop">—</div>
+              <div class="kpiLbl">Acto más común</div>
+            </div>
+            <div class="kpi bigkpi">
+              <div class="kpiNum" id="dbCondTop">—</div>
+              <div class="kpiLbl">Condición más común</div>
+            </div>
+          </div>
+
+          <div class="charts">
+            <div class="chartCard">
+              <div class="chartTitle">Top Actos</div>
+              <canvas id="chartActos" height="320"></canvas>
+            </div>
+            <div class="chartCard">
+              <div class="chartTitle">Top Condiciones</div>
+              <canvas id="chartConds" height="320"></canvas>
+            </div>
+          </div>
+
+<div class="list" id="recentList"></div>
+
+          <div class="actions">
+            <button class="ghost" id="dashBack">Volver</button>
+            <button class="danger" id="wipeBtn">Borrar datos del piloto</button>
+          </div>
+          <div class="msg" id="wipeMsg"></div>
+        </div>
+      </section></section>
+
+      <!-- View: Manual -->
+      <section class="view" id="viewManual">
+        <div class="card wide">
+          <h2>Manual rápido</h2>
+          <ol class="steps">
+            <li>Entra con tu <b>GMIN</b>. La app te identifica desde el directorio.</li>
+            <li>Registra <b>Recorrido</b> o <b>Interacción</b>.</li>
+            <li>Ingresa el <b>GMIN auditado</b> para autollenar nombre/plant/antigüedad/manager.</li>
+            <li>Selecciona <b>Acto</b> y <b>Condición</b> (buscables).</li>
+            <li>Guarda. El registro queda asociado a tu usuario automáticamente.</li>
+            <li>Exporta CSV cuando lo necesites.</li>
+          </ol>
+          <div class="actions">
+            <button class="ghost" id="manualBack">Volver</button>
+          </div>
+        </div>
+      </section>
+    
+    <section class="view" id="viewSecurito">
+  <div class="card wide">
+    <div class="headerRow">
+      <div>
+        <div class="title">Securito 🤖🛡️</div>
+        <div class="sub">Habla o escribe. Yo sugiero campañas, acciones y contramedidas basadas en tus hallazgos.</div>
+      </div>
+      <div class="secHeaderRight"><div class="pill" id="secAiPill">IA ON</div></div>
+    </div>
+
+
+
+    <div class="securitoSplit">
+      <div class="securitoAvatarCard">
+        <div class="securitoAvatarWrap" aria-label="Avatar Securito">
+          <img src="./assets/securito_idle.png" class="securitoRobot is-active" data-secstate="idle" alt="Securito idle"/>
+          <img src="./assets/securito_listening.png" class="securitoRobot" data-secstate="listening" alt="Securito listening"/>
+          <img src="./assets/securito_thinking.png" class="securitoRobot" data-secstate="thinking" alt="Securito thinking"/>
+          <img src="./assets/securito_speaking.png" class="securitoRobot" data-secstate="speaking" alt="Securito speaking"/>
+</div>
+
+        <div class="avatarControls">
+          <button class="btn micBtn" id="secTalk" type="button">
+            <span class="micDot" aria-hidden="true"></span>
+            Hablar
+          </button>
+          <button class="btn ghost" id="secStop" type="button">Detener</button>
+        </div>
+
+        <div class="micMeterWrap" aria-label="Nivel de micrófono">
+          <div class="micMeterLabel" id="secListenLabel">Listo</div>
+          <div class="micMeter">
+            <div class="micMeterFill" id="secMicFill"></div>
+          </div>
+        </div>
+
+        
+      </div>
+
+      <div class="securitoChatCard">
+        <div class="heroTitle">¡Hola! Soy Securito.</div>
+        <div class="heroText">Dime el hallazgo y tu objetivo. Te doy campaña, acciones y contramedidas.</div>
+
+        <div class="chatLog" id="secLog"></div>
+
+        <div class="chatRow">
+          <input id="secInput" placeholder="Ej: ¿Qué hago para reducir 'uso de celular'?" />
+          <button class="btn" id="secSend" type="button">Enviar</button>
+        </div>
+
+        <div class="hint">Securito usa IA (vía proxy). Sin IA activa, no responde.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+    <footer class="bottombar" id="bottombar">
+      <button class="navbtn active" data-nav="home">Inicio</button>
+      <button class="navbtn" data-nav="recorrido">Recorrido</button>
+      <button class="navbtn" data-nav="interaccion">Interacciones</button>
+      <button class="navbtn" data-nav="dashboard">Dashboard</button>
+        <button class="navbtn" data-nav="securito">Securito</button>
+      <button class="navbtn" data-nav="manual">Manual</button>
+    </footer>
+  </div>
+
+  <script type="module" src="app.js?v=40"></script>
+
+  </body>
+</html>
