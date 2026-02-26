@@ -1,45 +1,31 @@
-import { cors, json, supa, pickQueryParam } from "./_shared.js";
+// netlify/functions/gmin-lookup.js (CommonJS)
+const { json, cors, supa } = require('./_shared');
 
-export async function handler(event){
-  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: cors(), body: "" };
-  if (event.httpMethod !== "GET") return json(405, { ok:false, error:"Use GET" });
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors(), body: '' };
+  if (event.httpMethod !== 'GET') return json(405, { ok:false, error:'Method not allowed' });
 
-  const gmin = pickQueryParam(event.queryStringParameters, "gmin", "").replace(/[^0-9]/g, "");
-  if (!gmin) return json(400, { ok:false, found:false, error:"Missing gmin" });
+  try {
+    const gmin = (event.queryStringParameters?.gmin || '').toString().trim();
+    if (!gmin) return json(400, { ok:false, error:'Missing gmin' });
 
-  try{
-    const db = supa();
-    const { data: row, error } = await db
-      .from("gmin_directory")
-      .select("gmin,worker,legal_name,work_shift,plant,manager_name,manager_gmin,hire_date,length_of_service_years")
-      .eq("gmin", Number(gmin))
-      .maybeSingle();
-    if (error) return json(500, { ok:false, found:false, error: error.message });
-    if (!row) return json(200, { ok:true, found:false });
+    const client = supa();
+    if (!client) {
+      // Modo local/piloto: sin Supabase, responde vacío sin romper UI.
+      return json(200, { ok:true, found:false, source:'local' });
+    }
 
-    const { data: mgr } = await db
-      .from("managers")
-      .select("gmin,manager,area,turno")
-      .eq("gmin", Number(gmin))
+    const { data, error } = await client
+      .from('gmin_profiles')
+      .select('*')
+      .eq('gmin', gmin)
       .maybeSingle();
 
-    const name = row.worker || row.legal_name || "";
-    return json(200, {
-      ok:true,
-      found:true,
-      person: {
-        gmin: String(row.gmin),
-        name,
-        plant: row.plant || "",
-        shift: row.work_shift || "",
-        manager: row.manager_name || "",
-        manager_gmin: row.manager_gmin ? String(row.manager_gmin) : "",
-        hireDate: row.hire_date ? String(row.hire_date) : "",
-        lengthOfServiceYears: (row.length_of_service_years ?? null)
-      },
-      managerMeta: mgr ? { area: mgr.area || "", turno: mgr.turno || "", isManager: true } : { isManager:false }
-    });
-  }catch(e){
-    return json(500, { ok:false, found:false, error: String(e?.message || e) });
+    if (error) return json(200, { ok:false, error: error.message });
+    if (!data) return json(200, { ok:true, found:false });
+
+    return json(200, { ok:true, found:true, profile: data });
+  } catch (e) {
+    return json(200, { ok:false, error:'Lookup failed', detail: String(e && e.message ? e.message : e) });
   }
-}
+};

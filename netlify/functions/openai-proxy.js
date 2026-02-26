@@ -1,67 +1,32 @@
-// Netlify Function: OpenAI proxy with CORS
-// - Same-origin endpoint to avoid browser CORS issues
-// - Supports BYOK: client sends Authorization: Bearer <key>
+// netlify/functions/openai-proxy.js (CommonJS)
+// Optional passthrough proxy (kept for compatibility). Not required for normal use.
 
-export async function handler(event) {
-  // CORS preflight
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-      body: "",
-    };
-  }
+const { json, cors } = require('./_shared');
 
-  if (event.httpMethod !== "POST") {
-    return {
-      statusCode: 405,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Allow": "POST, OPTIONS",
-      },
-      body: "Method Not Allowed",
-    };
-  }
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors(), body: '' };
+  if (event.httpMethod !== 'POST') return json(405, { ok:false, error:'Method not allowed' });
 
   try {
-    const auth = event.headers?.authorization || event.headers?.Authorization || "";
-    if (!auth.startsWith("Bearer ")) {
-      return {
-        statusCode: 401,
-        headers: { "Access-Control-Allow-Origin": "*" },
-        body: "Missing Authorization Bearer key",
-      };
-    }
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) return json(200, { ok:false, error:'Missing OPENAI_API_KEY' });
 
-    const body = JSON.parse(event.body || "{}");
-    const upstream = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
+    const body = event.body ? JSON.parse(event.body) : {};
+    const url = body.url || 'https://api.openai.com/v1/chat/completions';
+    const payload = body.payload || {};
+
+    const res = await fetch(url, {
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Authorization": auth,
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload)
     });
 
-    const text = await upstream.text();
-
-    return {
-      statusCode: upstream.status,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Content-Type": upstream.headers.get("content-type") || "text/plain",
-      },
-      body: text,
-    };
-  } catch (err) {
-    return {
-      statusCode: 500,
-      headers: { "Access-Control-Allow-Origin": "*" },
-      body: String(err?.message || err),
-    };
+    const data = await res.json().catch(()=>({}));
+    return json(200, { ok: res.ok, status: res.status, data });
+  } catch (e) {
+    return json(200, { ok:false, error:'proxy failed', detail: String(e && e.message ? e.message : e) });
   }
-}
+};

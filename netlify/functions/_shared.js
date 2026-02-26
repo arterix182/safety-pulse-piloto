@@ -1,33 +1,42 @@
-import { createClient } from "@supabase/supabase-js";
+// netlify/functions/_shared.js (CommonJS)
+// Minimal shared helpers. Keeps dependencies optional (Supabase is optional).
 
-export function cors(){
-  return {
-    "access-control-allow-origin": "*",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type, authorization"
-  };
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+};
+
+function cors(){
+  return { ...corsHeaders };
 }
 
-export function json(statusCode, body){
+function json(statusCode, body){
   return {
     statusCode,
-    headers: { "content-type": "application/json; charset=utf-8", ...cors() },
-    body: JSON.stringify(body)
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    body: JSON.stringify(body),
   };
 }
 
-export function requireEnv(name){
+function requireEnv(name){
   const v = process.env[name];
   if (!v) throw new Error(`Missing env: ${name}`);
   return v;
 }
 
-export function supa(){
-  const url = requireEnv("SUPABASE_URL");
-  const key = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
-  return createClient(url, key, { auth: { persistSession: false } });
+// Optional Supabase client (only if @supabase/supabase-js is installed).
+function supa(){
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  try{
+    // eslint-disable-next-line global-require
+    const { createClient } = require('@supabase/supabase-js');
+    return createClient(url, key, { auth: { persistSession: false } });
+  }catch(e){
+    return null;
+  }
 }
 
-export function pickQueryParam(qs, key, fallback=""){
-  try{ return (qs?.[key] ?? fallback).toString(); }catch{ return fallback; }
-}
+module.exports = { cors, json, requireEnv, supa };

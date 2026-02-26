@@ -1,154 +1,157 @@
-import { json, requireEnv, supa } from "./_shared.js";
+// netlify/functions/chat.js (CommonJS)
+// Chat endpoint for Securito. Accepts optional `history` to keep conversation context.
 
-async function openaiChat(messages, tools){
-  const key = requireEnv("OPENAI_API_KEY");
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${key}`
-    },
-    body: JSON.stringify({
-      model: process.env.OPENAI_MODEL || "gpt-4.1-mini",
-      temperature: 0.2,
-      messages,
-      tools,
-      tool_choice: tools?.length ? "auto" : undefined
-    })
-  });
-  const data = await res.json().catch(()=>({}));
-  if (!res.ok) throw new Error(data?.error?.message || `OpenAI error (${res.status})`);
-  return data;
-}
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
 
-async function getTop(range, filters){
-  const now = Date.now();
-  const ms = range === "week" ? 7*24*60*60*1000 : 24*60*60*1000;
-  const fromISO = new Date(now - ms).toISOString();
-
-  const sb = supa();
-  let q = sb.from("incidents")
-    .select("acto_inseguro, condicion_insegura, plant, turno, created_at")
-    .gte("created_at", fromISO)
-    .order("created_at", { ascending:false })
-    .limit(2000);
-  if (filters?.plant && filters.plant !== "all") q = q.eq("plant", filters.plant);
-  if (filters?.turno && filters.turno !== "all") q = q.eq("turno", filters.turno);
-  const { data, error } = await q;
-  if (error) throw new Error(error.message);
-
-  const group = (rows, key) => {
-    const m = new Map();
-    for (const r of rows){
-      const k = (r?.[key] || "").toString().trim();
-      if (!k) continue;
-      m.set(k, (m.get(k)||0)+1);
-    }
-    return Array.from(m.entries()).sort((a,b)=>b[1]-a[1]).slice(0,10).map(([label,count])=>({label,count}));
-  };
-
+function json(statusCode, body) {
   return {
-    range,
-    from: fromISO,
-    total: (data||[]).length,
-    actos: group(data||[], "acto_inseguro"),
-    condiciones: group(data||[], "condicion_insegura")
+    statusCode,
+    headers: { 'Content-Type': 'application/json', ...corsHeaders },
+    body: JSON.stringify(body),
   };
 }
 
-async function getRecent(limit=20){
-  const sb = supa();
-  const { data, error } = await sb
-    .from("incidents")
-    .select("created_at, plant, turno, acto_inseguro, condicion_insegura, user_name, audited_name")
-    .order("created_at", { ascending:false })
-    .limit(Math.min(Math.max(limit, 1), 50));
-  if (error) throw new Error(error.message);
-  return data || [];
+function safeString(x) {
+  return (typeof x === 'string' ? x : '').trim();
 }
 
-export async function handler(event){
-  try{
-    if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: {"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type"}, body: "" };
-    if (event.httpMethod !== "POST") return json(405, { ok:false, error:"Method not allowed" });
+function normalizeHistory(history) {
+  if (!Array.isArray(history)) return [];
+  const out = [];
+  for (const m of history) {
+    if (!m || typeof m !== 'object') continue;
+    const role = m.role === 'assistant' ? 'assistant' : (m.role === 'user' ? 'user' : null);
+    const content = safeString(m.content);
+    if (!role || !content) continue;
+    out.push({ role, content });
+  }
+  // Keep it tight: last 12 messages (6 turns)
+  return out.slice(-12);
+}
 
-    const body = JSON.parse(event.body || "{}");
-    const question = (body?.question || "").toString().trim();
-    const user = body?.user || {};
-    if (!question) return json(400, { ok:false, error:"Missing question" });
-
-    const tools = [
-      {
-        type: "function",
-        function: {
-          name: "get_top",
-          description: "Obtiene el top de Actos/Condiciones del día o semana con datos reales de la base de datos.",
-          parameters: {
-            type: "object",
-            properties: {
-              range: { type: "string", enum: ["day","week"], description: "day=últimas 24h, week=últimos 7 días" },
-              filters: {
-                type: "object",
-                properties: {
-                  plant: { type: "string" },
-                  turno: { type: "string" }
-                }
-              }
-            },
-            required: ["range"]
-          }
-        }
-      },
-      {
-        type: "function",
-        function: {
-          name: "get_recent",
-          description: "Obtiene registros recientes para dar contexto a recomendaciones.",
-          parameters: {
-            type: "object",
-            properties: {
-              limit: { type: "integer", minimum: 1, maximum: 50 }
-            }
-          }
-        }
-      }
-    ];
-
-    const system = `Eres Securito, un asistente de seguridad industrial para planta automotriz.\n`+
-      `Reglas: responde en español claro, directo y accionable.\n`+
-      `Si te piden TOP del día/semana, debes usar get_top y basarte solo en datos reales.`;
-
-    const messages = [
-      { role: "system", content: system },
-      { role: "user", content: `Usuario: ${user?.name||""} (${user?.gmin||""}). Pregunta: ${question}` }
-    ];
-
-    // First pass
-    const first = await openaiChat(messages, tools);
-    const msg = first?.choices?.[0]?.message;
-    const toolCalls = msg?.tool_calls || [];
-
-    if (toolCalls.length){
-      // Execute tools
-      for (const tc of toolCalls){
-        const name = tc?.function?.name;
-        const args = JSON.parse(tc?.function?.arguments || "{}");
-        let result = null;
-        if (name === "get_top") result = await getTop(args.range, args.filters);
-        else if (name === "get_recent") result = await getRecent(args.limit || 20);
-        else result = { error: "Unknown tool" };
-
-        messages.push(msg);
-        messages.push({ role: "tool", tool_call_id: tc.id, content: JSON.stringify(result) });
-      }
-
-      const second = await openaiChat(messages, tools);
-      const out = second?.choices?.[0]?.message?.content || "";
-      return json(200, { ok:true, answer: out });
-    }
-
-    return json(200, { ok:true, answer: msg?.content || "" });
-  }catch(e){
-    return json(500, { ok:false, error: e.message || String(e) });
+async function fetchWithTimeout(url, opts, timeoutMs) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...opts, signal: ctrl.signal });
+    return res;
+  } finally {
+    clearTimeout(t);
   }
 }
+
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders, body: '' };
+  if (event.httpMethod !== 'POST') return json(405, { error: 'Method not allowed' });
+
+  try {
+    const body = event.body ? JSON.parse(event.body) : {};
+    const question = safeString(body.question);
+    const user = body.user && typeof body.user === 'object' ? body.user : {};
+    const userName = safeString(user.name || user.displayName || user.fullName || '');
+    const gmin = safeString(user.gmin || '');
+    const history = normalizeHistory(body.history);
+
+    if (!question) return json(400, { error: 'Missing question' });
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return json(200, {
+        ok: false,
+        reply: 'IA no disponible en este momento (falta OPENAI_API_KEY).',
+      });
+    }
+
+    const model = process.env.OPENAI_MODEL || 'gpt-4.1-mini';
+
+    // System prompt: friendly, concise, and uses context.
+    const system = [
+      'Eres Securito, un asistente virtual amigable y "vivo".',
+      'Hablas español natural (México), directo y con buena vibra.',
+      'Puedes hablar de cualquier tema; si el tema es seguridad, eres especialmente proactivo y práctico.',
+      'Mantén el contexto de la conversación. No repitas tu presentación en cada mensaje.',
+      'Cuando falte información, haz 1 pregunta concreta.',
+      'Si te saludan, saluda de regreso y usa el nombre si está disponible.',
+      'Si te piden un plan o ayuda general, responde con pasos claros y accionables.',
+      'Evita texto excesivamente largo: prioriza bullets y acciones.',
+    ].join(' ');
+
+    const metaLine = (() => {
+      const parts = [];
+      if (userName) parts.push(`Nombre: ${userName}`);
+      if (gmin) parts.push(`GMIN: ${gmin}`);
+      return parts.length ? `Contexto usuario: ${parts.join(' | ')}` : '';
+    })();
+
+    const messages = [
+      { role: 'system', content: system },
+      ...(metaLine ? [{ role: 'system', content: metaLine }] : []),
+      ...history,
+      { role: 'user', content: question },
+    ];
+
+    const payload = {
+      model,
+      messages,
+      temperature: 0.6,
+      max_tokens: 220,
+      presence_penalty: 0.2,
+      frequency_penalty: 0.2,
+    };
+
+    // Try once, retry once on transient failures.
+    const doCall = async () => {
+      const res = await fetchWithTimeout(
+        'https://api.openai.com/v1/chat/completions',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        },
+        14000
+      );
+      const data = await res.json().catch(() => ({}));
+      return { res, data };
+    };
+
+    let { res, data } = await doCall();
+    if (!res.ok) {
+      // One quick retry for 429/5xx/timeouts
+      const status = res.status || 0;
+      if (status === 429 || status >= 500) {
+        await new Promise((r) => setTimeout(r, 350));
+        ({ res, data } = await doCall());
+      }
+    }
+
+    if (!res.ok) {
+      const msg = (data && (data.error?.message || data.message)) || 'Error al consultar IA.';
+      return json(200, {
+        ok: false,
+        reply:
+          'Ahorita estoy teniendo bronca para conectarme a la IA. ' +
+          'Intenta otra vez en 10 segundos. Si sigue igual, revisa OPENAI_API_KEY en Netlify.',
+        debug: { status: res.status, message: msg },
+      });
+    }
+
+    const reply =
+      safeString(data?.choices?.[0]?.message?.content) ||
+      'Te escucho. ¿Qué necesitas?';
+
+    return json(200, { ok: true, reply, model });
+  } catch (err) {
+    return json(200, {
+      ok: false,
+      reply: 'Se me atoró algo al responder. Intenta de nuevo.',
+      debug: { message: String(err && err.message ? err.message : err) },
+    });
+  }
+};

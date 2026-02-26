@@ -1,0 +1,5 @@
+{
+  "name": "securito-netlify-functions",
+  "private": true,
+  "type": "commonjs"
+}

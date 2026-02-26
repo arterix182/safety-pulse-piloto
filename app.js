@@ -861,7 +861,8 @@ function drawBar(canvasId, labels, values){
 
   // baseline
   ctx.globalAlpha = 0.55;
-  ctx.strokeStyle = "rgba(9,16,31,.55)";
+  // Higher contrast for dark UI
+  ctx.strokeStyle = "rgba(255,255,255,.35)";
   ctx.lineWidth = 1*dpr;
   ctx.beginPath();
   ctx.moveTo(padL, h-padB);
@@ -898,11 +899,12 @@ function drawBar(canvasId, labels, values){
     const bw = barW*0.76;
 
     // bar
-    ctx.fillStyle = "rgba(9,16,31,.82)";
+    // bars
+    ctx.fillStyle = "rgba(40, 200, 120, .85)";
     ctx.fillRect(x, y, bw, bh);
 
     // value
-    ctx.fillStyle = "rgba(9,16,31,.92)";
+    ctx.fillStyle = "rgba(255,255,255,.95)";
     ctx.font = `${12*dpr}px system-ui`;
     ctx.textAlign = "center";
     ctx.fillText(String(v), x + bw/2, y - (6*dpr));
@@ -912,7 +914,7 @@ function drawBar(canvasId, labels, values){
       const raw = labels[i] || "";
       const [l1, l2] = wrap2(raw);
 
-      ctx.fillStyle = "rgba(9,16,31,.92)";
+      ctx.fillStyle = "rgba(255,255,255,.92)";
       ctx.font = labelFont;
       const lx = x + bw/2;
       const ly = h - (28*dpr);
@@ -932,23 +934,29 @@ function drawTrend(canvasId, daily){
   const c = document.getElementById(canvasId);
   if (!c) return;
   const ctx = c.getContext("2d");
-  const w = c.width = c.clientWidth * devicePixelRatio;
-  const h0 = (c.getAttribute("height") ? parseInt(c.getAttribute("height")) : 180);
-  const h = c.height = h0 * devicePixelRatio;
+  const dpr = window.devicePixelRatio || 1;
+  // ✅ same "no growth" pattern as bars
+  const baseH = parseInt(c.dataset.baseHeight || c.getAttribute("data-base-height") || c.getAttribute("height") || "180", 10);
+  if (!c.dataset.baseHeight) c.dataset.baseHeight = String(baseH);
+  c.style.width = "100%";
+  c.style.height = baseH + "px";
+  const rect = c.getBoundingClientRect();
+  const w = c.width = Math.max(1, Math.round(rect.width * dpr));
+  const h = c.height = Math.max(1, Math.round(baseH * dpr));
   ctx.clearRect(0,0,w,h);
 
-  const padL = 18*devicePixelRatio;
-  const padR = 12*devicePixelRatio;
-  const padT = 12*devicePixelRatio;
-  const padB = 34*devicePixelRatio;
+  const padL = 18*dpr;
+  const padR = 12*dpr;
+  const padT = 12*dpr;
+  const padB = 34*dpr;
 
   const labels = daily.map(d => d.day);
   const values = daily.map(d => d.count);
   const maxV = Math.max(1, ...values);
 
   // grid
-  ctx.strokeStyle = "rgba(9,16,31,.20)";
-  ctx.lineWidth = 1*devicePixelRatio;
+  ctx.strokeStyle = "rgba(255,255,255,.18)";
+  ctx.lineWidth = 1*dpr;
   for (let i=0;i<4;i++){
     const y = padT + i*(h-padT-padB)/3;
     ctx.beginPath();
@@ -958,8 +966,8 @@ function drawTrend(canvasId, daily){
   }
 
   // line
-  ctx.strokeStyle = "rgba(9,16,31,.85)";
-  ctx.lineWidth = 2.2*devicePixelRatio;
+  ctx.strokeStyle = "rgba(255,255,255,.82)";
+  ctx.lineWidth = 2.2*dpr;
   ctx.beginPath();
   values.forEach((v,i) => {
     const x = padL + i*(w-padL-padR)/Math.max(1, values.length-1);
@@ -969,15 +977,15 @@ function drawTrend(canvasId, daily){
   ctx.stroke();
 
   // dots
-  ctx.fillStyle = "rgba(9,16,31,.85)";
+  ctx.fillStyle = "rgba(255,255,255,.85)";
   values.forEach((v,i) => {
     const x = padL + i*(w-padL-padR)/Math.max(1, values.length-1);
     const y = (h-padB) - (h-padT-padB)*(v/maxV);
-    ctx.beginPath(); ctx.arc(x,y,3.2*devicePixelRatio,0,Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x,y,3.2*dpr,0,Math.PI*2); ctx.fill();
   });
 
   // labels density control
-  const maxLabels = Math.max(4, Math.floor((w/devicePixelRatio) / 70));
+  const maxLabels = Math.max(4, Math.floor((w/dpr) / 70));
   const step = Math.max(1, Math.ceil(labels.length / maxLabels));
 
   ctx.fillStyle = "rgba(9,16,31,.92)";
@@ -1108,15 +1116,89 @@ function secAiUpdatePill(){
   pill.style.background = "rgba(34,197,94,.10)";
 }
 
+// --- Memoria de conversación (para que Securito NO reinicie cada mensaje) ---
+const SEC_HISTORY_KEY = "securito_chat_history_v1";
+let secHistory = [];
+function secHistoryLoad(){
+  try{
+    const raw = sessionStorage.getItem(SEC_HISTORY_KEY) || localStorage.getItem(SEC_HISTORY_KEY);
+    if (raw){
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) secHistory = arr.filter(x=>x && typeof x === "object");
+    }
+  }catch(e){ secHistory = []; }
+}
+function secHistorySave(){
+  try{
+    const trimmed = secHistory.slice(-12);
+    sessionStorage.setItem(SEC_HISTORY_KEY, JSON.stringify(trimmed));
+    // backup suave por si el navegador mata la session
+    localStorage.setItem(SEC_HISTORY_KEY, JSON.stringify(trimmed));
+  }catch(e){}
+}
+function secHistoryPush(role, content){
+  const c = (content||"").toString().trim();
+  if (!c) return;
+  const r = role === "assistant" ? "assistant" : "user";
+  secHistory.push({ role: r, content: c });
+  secHistory = secHistory.slice(-12);
+  secHistorySave();
+}
+
+// carga memoria al iniciar
+secHistoryLoad();
+
+async function fetchJsonWithTimeout(url, options, timeoutMs){
+  const ctrl = new AbortController();
+  const t = setTimeout(()=>ctrl.abort(), timeoutMs);
+  try{
+    const res = await fetch(url, { ...options, signal: ctrl.signal });
+    const json = await res.json().catch(()=>({}));
+    return { res, json };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 async function callSecuritoAI({question, user}){
-  const r = await fetch("/.netlify/functions/chat", {
-    method: "POST",
-    headers: { "content-type":"application/json" },
-    body: JSON.stringify({ question, user })
-  });
-  const j = await r.json().catch(()=>({}));
-  if (!r.ok || !j.ok) throw new Error(j?.error || `chat ${r.status}`);
-  return (j.answer || "").toString().trim();
+  // Empuja pregunta a memoria antes de llamar
+  secHistoryPush("user", question);
+
+  const payload = { question, user, history: secHistory.slice(-12) };
+
+  const doCall = () => fetchJsonWithTimeout(
+    "/.netlify/functions/chat",
+    {
+      method: "POST",
+      headers: { "content-type":"application/json" },
+      body: JSON.stringify(payload)
+    },
+    16000
+  );
+
+  // 1) intento normal
+  let { res, json } = await doCall();
+
+  // 2) retry rápido si se atoró (red/5xx/429)
+  if (!res.ok || json?.ok === false){
+    const status = res.status || 0;
+    if (status === 429 || status >= 500 || status === 0){
+      await new Promise(r=>setTimeout(r, 350));
+      ({ res, json } = await doCall());
+    }
+  }
+
+  const reply = (json?.reply || json?.answer || "").toString().trim();
+  if (!res.ok || !reply){
+    // Si falló, NO llenamos memoria con basura; sacamos el último "user" para evitar loops.
+    secHistory = secHistory.filter((m,i)=>!(i===secHistory.length-1 && m.role==="user" && m.content===question.trim()));
+    secHistorySave();
+    throw new Error(json?.error || json?.debug?.message || `chat ${res.status}`);
+  }
+
+  // Guarda respuesta en memoria
+  secHistoryPush("assistant", reply);
+  return reply;
 }
 
 function aiPromptFromContext(question, records){
@@ -1929,6 +2011,11 @@ function secCreateSpeechRec(){
 }
 
 window.addEventListener("DOMContentLoaded", ()=>{
+  // Warm-up: reduce "primer mensaje" lento por cold start.
+  try{
+    fetch("/.netlify/functions/health").catch(()=>{});
+  }catch(e){}
+
   const talk = document.getElementById("secTalk");
   const stop = document.getElementById("secStop");
   const input = document.getElementById("secInput");

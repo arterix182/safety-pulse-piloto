@@ -1,6 +1,7 @@
-import { json } from "./_shared.js";
+// netlify/functions/health.js (CommonJS)
+const { json, cors } = require('./_shared');
 
-export async function handler(event){
-  if (event.httpMethod === "OPTIONS") return { statusCode: 204, headers: {"access-control-allow-origin":"*","access-control-allow-methods":"GET,POST,OPTIONS","access-control-allow-headers":"content-type"}, body: "" };
-  return json(200, { ok:true, service:"securito-cloud", version:"v40" });
-}
+exports.handler = async (event) => {
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: cors(), body: '' };
+  return json(200, { ok: true, service: 'securito-cloud', version: 'v42.3.2' });
+};
