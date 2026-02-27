@@ -415,9 +415,14 @@ function renderUserHeader(){
 
 
 async function refreshHomeKPIs(){
-  let all = await dbGetAll();
+  const local = await dbGetAll();
+  let all = local;
   if (CLOUD.enabled){
-    try{ all = await cloudListRecords({ limit: 2000 }); }catch(e){}
+    try{
+      const cloud = await cloudListRecords({ limit: 2000 });
+      // ✅ Never let an empty cloud response wipe local data.
+      if (Array.isArray(cloud) && cloud.length > 0) all = cloud;
+    }catch(e){}
   }
   const rec = all.filter(r => r.type === "recorrido").length;
   const inter = all.filter(r => r.type === "interaccion").length;
@@ -703,12 +708,15 @@ $("#dashBack").addEventListener("click", () => setView("home"));
 $("#manualBack").addEventListener("click", () => setView("home"));
 
 async function openDashboard(){
-  let all = await dbGetAll();
+  const local = await dbGetAll();
+  let all = local;
   // Prefer cloud records when available
   if (CLOUD.enabled){
     try{
       setCloudBadge("☁️ Cargando nube…", "warn");
-      all = await cloudListRecords({ limit: 2000 });
+      const cloud = await cloudListRecords({ limit: 2000 });
+      // ✅ Do not wipe dashboard if cloud returns empty.
+      if (Array.isArray(cloud) && cloud.length > 0) all = cloud;
       setCloudBadge("☁️ Nube OK", "ok");
     }catch(e){
       setCloudBadge("☁️ Nube falló, usando local", "warn");
